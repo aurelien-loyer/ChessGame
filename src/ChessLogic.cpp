@@ -39,40 +39,47 @@ bool ChessLogic::makeMove(const Move& move) {
         return false;
     }
     
-    Piece capturedPiece;
-    // Save the moving piece info BEFORE moving
-    Piece movingPiece = m_board.getPiece(move.from);
-    Color pieceColor = movingPiece.getColor();
+    // Créer un enregistrement du coup pour pouvoir l'annuler
+    MoveRecord record;
+    record.move = move;
+    record.enPassantTarget = m_board.getEnPassantTarget();
+    record.castlingRights = m_board.getCastlingRights();
+    record.wasEnPassantCapture = move.isEnPassant;
     
-    // Handle en passant capture
+    // Sauvegarder la pièce qui bouge
+    record.movedPiece = m_board.getPiece(move.from);
+    Color pieceColor = record.movedPiece.getColor();
+    
+    // Gérer la capture en passant
     if (move.isEnPassant) {
-        Position capturePos = {move.from.row, move.to.col};
-        capturedPiece = m_board.getPiece(capturePos);
-        m_board.removePiece(capturePos);
+        record.enPassantCapturePos = {move.from.row, move.to.col};
+        record.capturedPiece = m_board.getPiece(record.enPassantCapturePos);
+        m_board.removePiece(record.enPassantCapturePos);
     } else {
-        capturedPiece = m_board.getPiece(move.to);
+        record.capturedPiece = m_board.getPiece(move.to);
+        record.enPassantCapturePos = {-1, -1};
     }
     
-    // Store move for undo
-    m_moveHistory.push_back({move, capturedPiece});
+    // Stocker l'enregistrement
+    m_moveHistory.push_back(record);
     
-    // Handle castling
+    // Gérer le roque
     if (move.isCastling) {
         m_board.movePiece(move.from, move.to);
         
-        // Move the rook
+        // Déplacer la tour
         int rookFromCol = (move.to.col > move.from.col) ? 7 : 0;
         int rookToCol = (move.to.col > move.from.col) ? 5 : 3;
         m_board.movePiece({move.from.row, rookFromCol}, {move.from.row, rookToCol});
         
-        // Disable castling rights
-        m_board.disableCastling(movingPiece.getColor(), true);
-        m_board.disableCastling(movingPiece.getColor(), false);
+        // Désactiver les droits de roque
+        m_board.disableCastling(pieceColor, true);
+        m_board.disableCastling(pieceColor, false);
     } else {
-        // Regular move
+        // Coup normal
         m_board.movePiece(move.from, move.to);
         
-        // Handle promotion - use saved color
+        // Gérer la promotion
         if (move.promotion != PieceType::None) {
             Piece promotedPiece(move.promotion, pieceColor);
             promotedPiece.setMoved(true);
@@ -80,21 +87,21 @@ bool ChessLogic::makeMove(const Move& move) {
         }
     }
     
-    // Update en passant target
+    // Mettre à jour la cible en passant
     m_board.clearEnPassantTarget();
-    if (movingPiece.getType() == PieceType::Pawn) {
+    if (record.movedPiece.getType() == PieceType::Pawn) {
         int rowDiff = move.to.row - move.from.row;
         if (std::abs(rowDiff) == 2) {
             m_board.setEnPassantTarget({(move.from.row + move.to.row) / 2, move.from.col});
         }
     }
     
-    // Update castling rights if rook or king moved
-    if (movingPiece.getType() == PieceType::King) {
+    // Mettre à jour les droits de roque si la tour ou le roi bouge
+    if (record.movedPiece.getType() == PieceType::King) {
         m_board.disableCastling(pieceColor, true);
         m_board.disableCastling(pieceColor, false);
     }
-    if (movingPiece.getType() == PieceType::Rook) {
+    if (record.movedPiece.getType() == PieceType::Rook) {
         if (move.from.col == 0) {
             m_board.disableCastling(pieceColor, false);
         } else if (move.from.col == 7) {
@@ -102,7 +109,7 @@ bool ChessLogic::makeMove(const Move& move) {
         }
     }
     
-    // Switch turn
+    // Changer de tour
     m_currentTurn = (m_currentTurn == Color::White) ? Color::Black : Color::White;
     
     return true;
@@ -113,9 +120,49 @@ bool ChessLogic::undoMove() {
         return false;
     }
     
-    // TODO: Implement full undo with castling rights restoration
-    m_moveHistory.pop_back();
+    const MoveRecord& record = m_moveHistory.back();
+    const Move& move = record.move;
+    
+    // Annuler le roque
+    if (move.isCastling) {
+        // Remettre le roi à sa position d'origine
+        m_board.movePiece(move.to, move.from);
+        
+        // Remettre la tour à sa position d'origine
+        int rookFromCol = (move.to.col > move.from.col) ? 7 : 0;
+        int rookToCol = (move.to.col > move.from.col) ? 5 : 3;
+        m_board.movePiece({move.from.row, rookToCol}, {move.from.row, rookFromCol});
+    } else if (record.wasEnPassantCapture) {
+        // Cas spécial: capture en passant
+        // Remettre le pion qui a bougé à sa position d'origine
+        m_board.setPiece(move.from, record.movedPiece);
+        // Vider la case d'arrivée
+        m_board.setPiece(move.to, Piece());
+        // Remettre le pion capturé à sa position (pas sur move.to!)
+        m_board.setPiece(record.enPassantCapturePos, record.capturedPiece);
+    } else {
+        // Coup normal ou capture normale
+        // Remettre la pièce à sa position d'origine
+        m_board.setPiece(move.from, record.movedPiece);
+        // Restaurer la pièce capturée (ou case vide) sur la case d'arrivée
+        m_board.setPiece(move.to, record.capturedPiece);
+    }
+    
+    // Restaurer la cible en passant
+    if (record.enPassantTarget.isValid()) {
+        m_board.setEnPassantTarget(record.enPassantTarget);
+    } else {
+        m_board.clearEnPassantTarget();
+    }
+    
+    // Restaurer les droits de roque
+    m_board.setCastlingRights(record.castlingRights);
+    
+    // Changer de tour (revenir au joueur précédent)
     m_currentTurn = (m_currentTurn == Color::White) ? Color::Black : Color::White;
+    
+    // Supprimer l'enregistrement
+    m_moveHistory.pop_back();
     
     return true;
 }
@@ -175,6 +222,22 @@ bool ChessLogic::isStalemate(Color color) const {
     }
     
     return true;
+}
+
+std::vector<Move> ChessLogic::getAllLegalMoves(Color color) const {
+    std::vector<Move> allMoves;
+    std::vector<Position> pieces = m_board.findPieces(color);
+    
+    Color savedTurn = m_currentTurn;
+    const_cast<Color&>(m_currentTurn) = color;
+    
+    for (const Position& pos : pieces) {
+        std::vector<Move> moves = getLegalMoves(pos);
+        allMoves.insert(allMoves.end(), moves.begin(), moves.end());
+    }
+    
+    const_cast<Color&>(m_currentTurn) = savedTurn;
+    return allMoves;
 }
 
 GameState ChessLogic::getGameState() const {

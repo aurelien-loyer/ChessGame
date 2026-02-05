@@ -2,6 +2,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <random>
 
 namespace Chess {
 
@@ -11,7 +12,12 @@ Game::Game()
     , m_selectedTime(TimeOption::FiveMinutes)
     , m_whiteTime(300.0f)
     , m_blackTime(300.0f)
-    , m_timerEnabled(true) {
+    , m_timerEnabled(true)
+    , m_gameMode(GameMode::PlayerVsPlayer)
+    , m_selectedDifficulty(AIDifficulty::Medium)
+    , m_playerColor(Color::White)
+    , m_aiThinking(false)
+    , m_aiColor(Color::Black) {
 }
 
 Game::~Game() = default;
@@ -27,6 +33,7 @@ bool Game::initialize() {
     m_board = std::make_unique<Board>();
     m_board->initialize();
     m_logic = std::make_unique<ChessLogic>(*m_board);
+    m_aiPlayer = std::make_unique<AIPlayer>(*m_board, *m_logic);
     
     m_renderer = std::make_unique<Renderer>(*m_window, *m_board);
     if (!m_renderer->loadResources()) {
@@ -44,14 +51,50 @@ void Game::initMenuButtons() {
     float buttonHeight = 60;
     float centerX = WINDOW_WIDTH / 2 - buttonWidth / 2;
     
-    m_playButton.bounds = sf::FloatRect(sf::Vector2f(centerX, 550), sf::Vector2f(buttonWidth, buttonHeight));
+    m_playButton.bounds = sf::FloatRect(sf::Vector2f(centerX, 650), sf::Vector2f(buttonWidth, buttonHeight));
     m_playButton.text = "Jouer";
     
     m_restartButton.bounds = sf::FloatRect(sf::Vector2f(centerX, 420), sf::Vector2f(buttonWidth, buttonHeight));
     m_restartButton.text = "Rejouer";
     
-    m_quitButton.bounds = sf::FloatRect(sf::Vector2f(centerX, 630), sf::Vector2f(buttonWidth, buttonHeight));
+    m_quitButton.bounds = sf::FloatRect(sf::Vector2f(centerX, 730), sf::Vector2f(buttonWidth, buttonHeight));
     m_quitButton.text = "Quitter";
+    
+    // Game mode buttons
+    float modeButtonWidth = 180;
+    float modeButtonHeight = 50;
+    float modeStartX = WINDOW_WIDTH / 2 - modeButtonWidth - 10;
+    float modeY = 280;
+    
+    m_pvpButton.bounds = sf::FloatRect(sf::Vector2f(modeStartX, modeY), sf::Vector2f(modeButtonWidth, modeButtonHeight));
+    m_pvpButton.text = "Joueur vs Joueur";
+    m_pvpButton.selected = (m_gameMode == GameMode::PlayerVsPlayer);
+    
+    m_pvaButton.bounds = sf::FloatRect(sf::Vector2f(modeStartX + modeButtonWidth + 20, modeY), sf::Vector2f(modeButtonWidth, modeButtonHeight));
+    m_pvaButton.text = "Joueur vs IA";
+    m_pvaButton.selected = (m_gameMode == GameMode::PlayerVsAI);
+    
+    // AI Difficulty buttons
+    m_difficultyButtons.clear();
+    std::vector<std::pair<std::string, AIDifficulty>> difficultyOptions = {
+        {"Facile", AIDifficulty::Easy},
+        {"Moyen", AIDifficulty::Medium},
+        {"Difficile", AIDifficulty::Hard},
+        {"Expert", AIDifficulty::Expert}
+    };
+    
+    float diffBtnWidth = 100;
+    float diffBtnHeight = 40;
+    float diffStartX = (WINDOW_WIDTH - (difficultyOptions.size() * diffBtnWidth + (difficultyOptions.size() - 1) * 10)) / 2;
+    float diffY = 370;
+    
+    for (size_t i = 0; i < difficultyOptions.size(); ++i) {
+        Button btn;
+        btn.bounds = sf::FloatRect(sf::Vector2f(diffStartX + i * (diffBtnWidth + 10), diffY), sf::Vector2f(diffBtnWidth, diffBtnHeight));
+        btn.text = difficultyOptions[i].first;
+        btn.selected = (difficultyOptions[i].second == m_selectedDifficulty);
+        m_difficultyButtons.push_back(btn);
+    }
     
     // Time selection buttons
     m_timeButtons.clear();
@@ -68,7 +111,7 @@ void Game::initMenuButtons() {
     float btnWidth = 100;
     float btnHeight = 40;
     float startX = (WINDOW_WIDTH - (timeOptions.size() * btnWidth + (timeOptions.size() - 1) * 10)) / 2;
-    float btnY = 420;
+    float btnY = 520;
     
     for (size_t i = 0; i < timeOptions.size(); ++i) {
         Button btn;
@@ -146,10 +189,14 @@ void Game::handleMouseMove(int x, int y) {
     bool wasPlayHovered = m_playButton.hovered;
     bool wasRestartHovered = m_restartButton.hovered;
     bool wasQuitHovered = m_quitButton.hovered;
+    bool wasPvpHovered = m_pvpButton.hovered;
+    bool wasPvaHovered = m_pvaButton.hovered;
     
     m_playButton.hovered = m_playButton.bounds.contains(pos);
     m_restartButton.hovered = m_restartButton.bounds.contains(pos);
     m_quitButton.hovered = m_quitButton.bounds.contains(pos);
+    m_pvpButton.hovered = m_pvpButton.bounds.contains(pos);
+    m_pvaButton.hovered = m_pvaButton.bounds.contains(pos);
     
     bool anyTimeHovered = false;
     for (auto& btn : m_timeButtons) {
@@ -158,10 +205,19 @@ void Game::handleMouseMove(int x, int y) {
         if (btn.hovered && !wasHovered) anyTimeHovered = true;
     }
     
+    bool anyDiffHovered = false;
+    for (auto& btn : m_difficultyButtons) {
+        bool wasHovered = btn.hovered;
+        btn.hovered = btn.bounds.contains(pos);
+        if (btn.hovered && !wasHovered) anyDiffHovered = true;
+    }
+    
     if ((m_playButton.hovered && !wasPlayHovered) ||
         (m_restartButton.hovered && !wasRestartHovered) ||
         (m_quitButton.hovered && !wasQuitHovered) ||
-        anyTimeHovered) {
+        (m_pvpButton.hovered && !wasPvpHovered) ||
+        (m_pvaButton.hovered && !wasPvaHovered) ||
+        anyTimeHovered || anyDiffHovered) {
         m_soundManager->playMenuHover();
     }
 }
@@ -170,6 +226,38 @@ void Game::handleMenuClick(int x, int y) {
     sf::Vector2f pos(static_cast<float>(x), static_cast<float>(y));
     
     if (m_gameState == GameState::MainMenu) {
+        // Check game mode buttons
+        if (m_pvpButton.bounds.contains(pos)) {
+            m_soundManager->playMenuClick();
+            m_gameMode = GameMode::PlayerVsPlayer;
+            m_pvpButton.selected = true;
+            m_pvaButton.selected = false;
+        } else if (m_pvaButton.bounds.contains(pos)) {
+            m_soundManager->playMenuClick();
+            m_gameMode = GameMode::PlayerVsAI;
+            m_pvpButton.selected = false;
+            m_pvaButton.selected = true;
+        }
+        
+        // Check difficulty buttons (only if vs AI mode)
+        if (m_gameMode == GameMode::PlayerVsAI) {
+            std::vector<AIDifficulty> diffValues = {
+                AIDifficulty::Easy,
+                AIDifficulty::Medium,
+                AIDifficulty::Hard,
+                AIDifficulty::Expert
+            };
+            
+            for (size_t i = 0; i < m_difficultyButtons.size(); ++i) {
+                if (m_difficultyButtons[i].bounds.contains(pos)) {
+                    m_soundManager->playMenuClick();
+                    m_selectedDifficulty = diffValues[i];
+                    for (auto& btn : m_difficultyButtons) btn.selected = false;
+                    m_difficultyButtons[i].selected = true;
+                }
+            }
+        }
+        
         // Check time buttons
         std::vector<TimeOption> timeValues = {
             TimeOption::NoTimer,
@@ -241,6 +329,7 @@ void Game::update(float dt) {
     
     if (m_gameState == GameState::Playing || m_gameState == GameState::Check) {
         updateTimer(dt);
+        updateAI();
         
         if (m_gameState != GameState::WhiteTimeout && m_gameState != GameState::BlackTimeout) {
             GameState newState = m_logic->getGameState();
@@ -370,20 +459,94 @@ void Game::drawMainMenu() {
     title.setFillColor(sf::Color(118, 150, 86));
     title.setStyle(sf::Text::Bold);
     sf::FloatRect titleBounds = title.getLocalBounds();
-    title.setPosition(sf::Vector2f((WINDOW_WIDTH - titleBounds.size.x) / 2, 100));
+    title.setPosition(sf::Vector2f((WINDOW_WIDTH - titleBounds.size.x) / 2, 80));
     m_window->draw(title);
     
     sf::Text subtitle(*font, sf::String(U"\u2654 \u2655 \u2656 \u2657 \u2658 \u2659"), 36);
     subtitle.setFillColor(sf::Color(180, 180, 180));
     sf::FloatRect subBounds = subtitle.getLocalBounds();
-    subtitle.setPosition(sf::Vector2f((WINDOW_WIDTH - subBounds.size.x) / 2, 190));
+    subtitle.setPosition(sf::Vector2f((WINDOW_WIDTH - subBounds.size.x) / 2, 170));
     m_window->draw(subtitle);
+    
+    // Game mode label
+    sf::Text modeLabel(*font, "Mode de jeu:", 22);
+    modeLabel.setFillColor(sf::Color(200, 200, 200));
+    sf::FloatRect modeLabelBounds = modeLabel.getLocalBounds();
+    modeLabel.setPosition(sf::Vector2f((WINDOW_WIDTH - modeLabelBounds.size.x) / 2, 240));
+    m_window->draw(modeLabel);
+    
+    // Game mode buttons
+    auto drawModeButton = [&](const Button& btn) {
+        sf::Color btnColor;
+        if (btn.selected) {
+            btnColor = sf::Color(118, 150, 86);
+        } else if (btn.hovered) {
+            btnColor = sf::Color(80, 100, 60);
+        } else {
+            btnColor = sf::Color(60, 60, 60);
+        }
+        
+        sf::RectangleShape btnShape(sf::Vector2f(btn.bounds.size.x, btn.bounds.size.y));
+        btnShape.setPosition(sf::Vector2f(btn.bounds.position.x, btn.bounds.position.y));
+        btnShape.setFillColor(btnColor);
+        btnShape.setOutlineColor(btn.selected ? sf::Color(150, 200, 100) : sf::Color(80, 80, 80));
+        btnShape.setOutlineThickness(btn.selected ? 2 : 1);
+        m_window->draw(btnShape);
+        
+        sf::Text btnText(*font, btn.text, 16);
+        btnText.setFillColor(sf::Color::White);
+        sf::FloatRect btnTextBounds = btnText.getLocalBounds();
+        btnText.setPosition(sf::Vector2f(
+            btn.bounds.position.x + (btn.bounds.size.x - btnTextBounds.size.x) / 2,
+            btn.bounds.position.y + (btn.bounds.size.y - btnTextBounds.size.y) / 2 - 3
+        ));
+        m_window->draw(btnText);
+    };
+    
+    drawModeButton(m_pvpButton);
+    drawModeButton(m_pvaButton);
+    
+    // AI Difficulty section (only visible when vs AI)
+    if (m_gameMode == GameMode::PlayerVsAI) {
+        sf::Text diffLabel(*font, "Difficulte de l'IA:", 22);
+        diffLabel.setFillColor(sf::Color(200, 200, 200));
+        sf::FloatRect diffLabelBounds = diffLabel.getLocalBounds();
+        diffLabel.setPosition(sf::Vector2f((WINDOW_WIDTH - diffLabelBounds.size.x) / 2, 340));
+        m_window->draw(diffLabel);
+        
+        for (const auto& btn : m_difficultyButtons) {
+            sf::Color btnColor;
+            if (btn.selected) {
+                btnColor = sf::Color(180, 120, 60);
+            } else if (btn.hovered) {
+                btnColor = sf::Color(140, 100, 50);
+            } else {
+                btnColor = sf::Color(80, 60, 40);
+            }
+            
+            sf::RectangleShape btnShape(sf::Vector2f(btn.bounds.size.x, btn.bounds.size.y));
+            btnShape.setPosition(sf::Vector2f(btn.bounds.position.x, btn.bounds.position.y));
+            btnShape.setFillColor(btnColor);
+            btnShape.setOutlineColor(btn.selected ? sf::Color(220, 160, 80) : sf::Color(100, 80, 60));
+            btnShape.setOutlineThickness(btn.selected ? 2 : 1);
+            m_window->draw(btnShape);
+            
+            sf::Text btnText(*font, btn.text, 14);
+            btnText.setFillColor(sf::Color::White);
+            sf::FloatRect btnTextBounds = btnText.getLocalBounds();
+            btnText.setPosition(sf::Vector2f(
+                btn.bounds.position.x + (btn.bounds.size.x - btnTextBounds.size.x) / 2,
+                btn.bounds.position.y + (btn.bounds.size.y - btnTextBounds.size.y) / 2 - 3
+            ));
+            m_window->draw(btnText);
+        }
+    }
     
     // Time selection label
     sf::Text timeLabel(*font, "Temps par joueur:", 22);
     timeLabel.setFillColor(sf::Color(200, 200, 200));
     sf::FloatRect timeLabelBounds = timeLabel.getLocalBounds();
-    timeLabel.setPosition(sf::Vector2f((WINDOW_WIDTH - timeLabelBounds.size.x) / 2, 370));
+    timeLabel.setPosition(sf::Vector2f((WINDOW_WIDTH - timeLabelBounds.size.x) / 2, 470));
     m_window->draw(timeLabel);
     
     // Time buttons
@@ -615,6 +778,14 @@ void Game::handleClick(int x, int y) {
         return;
     }
     
+    // Block player input during AI turn
+    if (m_gameMode == GameMode::PlayerVsAI && m_logic->getCurrentTurn() == m_aiColor) {
+        return;
+    }
+    if (m_aiThinking) {
+        return;
+    }
+    
     Position clickedPos = m_renderer->screenToBoard(x, y);
     
     if (!clickedPos.isValid()) {
@@ -702,14 +873,71 @@ void Game::tryMove(const Position& to) {
 void Game::resetGame() {
     m_board->initialize();
     m_logic = std::make_unique<ChessLogic>(*m_board);
+    m_aiPlayer = std::make_unique<AIPlayer>(*m_board, *m_logic);
+    m_aiPlayer->setDifficulty(m_selectedDifficulty);
     deselectPiece();
     m_waitingForPromotion = false;
+    m_aiThinking = false;
+    
+    // Couleur aléatoire pour le mode IA
+    if (m_gameMode == GameMode::PlayerVsAI) {
+        std::random_device rd;
+        std::mt19937 rng(rd());
+        std::uniform_int_distribution<int> dist(0, 1);
+        m_playerColor = (dist(rng) == 0) ? Color::White : Color::Black;
+        m_aiColor = (m_playerColor == Color::White) ? Color::Black : Color::White;
+    } else {
+        m_playerColor = Color::White;
+        m_aiColor = Color::Black;
+    }
     
     // Setup timer based on selected time
     m_timerEnabled = (m_selectedTime != TimeOption::NoTimer);
     float timeInSeconds = static_cast<float>(static_cast<int>(m_selectedTime)) * 60.0f;
     m_whiteTime = timeInSeconds;
     m_blackTime = timeInSeconds;
+}
+
+void Game::makeAIMove() {
+    if (!m_aiPlayer) return;
+    
+    Move bestMove = m_aiPlayer->findBestMove(m_aiColor);
+    
+    if (bestMove.from.isValid() && bestMove.to.isValid()) {
+        bool isCapture = !m_board->getPiece(bestMove.to).isEmpty() || bestMove.isEnPassant;
+        
+        Position from = bestMove.from;
+        Position to = bestMove.to;
+        
+        if (m_logic->makeMove(bestMove)) {
+            m_renderer->setAnimating(true, from, to);
+            
+            if (isCapture) {
+                m_soundManager->playCapture();
+            } else {
+                m_soundManager->playMove();
+            }
+        }
+    }
+}
+
+void Game::updateAI() {
+    if (m_gameMode != GameMode::PlayerVsAI) return;
+    if (m_logic->getCurrentTurn() != m_aiColor) return;
+    if (m_waitingForPromotion) return;
+    if (m_renderer->isAnimating()) return;
+    if (m_gameState == GameState::Checkmate || 
+        m_gameState == GameState::Stalemate || 
+        m_gameState == GameState::Draw ||
+        m_gameState == GameState::WhiteTimeout ||
+        m_gameState == GameState::BlackTimeout) return;
+    
+    // Toujours synchrone — l'IA travaille sur des copies, pas besoin de thread
+    if (!m_aiThinking) {
+        m_aiThinking = true;
+        makeAIMove();
+        m_aiThinking = false;
+    }
 }
 
 } // namespace Chess

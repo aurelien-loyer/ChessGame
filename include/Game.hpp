@@ -5,6 +5,7 @@
 #include "ChessLogic.hpp"
 #include "Renderer.hpp"
 #include "SoundManager.hpp"
+#include "AIPlayer.hpp"
 #include <SFML/Graphics.hpp>
 #include <memory>
 #include <optional>
@@ -28,6 +29,12 @@ enum class TimeOption {
     TenMinutes = 10,
     FifteenMinutes = 15,
     ThirtyMinutes = 30
+};
+
+// Mode de jeu
+enum class GameMode {
+    PlayerVsPlayer,
+    PlayerVsAI
 };
 
 class Game {
@@ -61,6 +68,10 @@ private:
     void initMenuButtons();
     void updateTimer(float dt);
     std::string formatTime(float seconds);
+    
+    // AI functions
+    void makeAIMove();
+    void updateAI();
 
 private:
     std::unique_ptr<sf::RenderWindow> m_window;
@@ -68,6 +79,7 @@ private:
     std::unique_ptr<ChessLogic> m_logic;
     std::unique_ptr<Renderer> m_renderer;
     std::unique_ptr<SoundManager> m_soundManager;
+    std::unique_ptr<AIPlayer> m_aiPlayer;
     
     std::optional<Position> m_selectedPosition;
     std::vector<Move> m_currentLegalMoves;
@@ -93,6 +105,21 @@ private:
     float m_whiteTime;
     float m_blackTime;
     bool m_timerEnabled;
+    
+    // Game mode
+    GameMode m_gameMode;
+    Button m_pvpButton;
+    Button m_pvaButton;
+    
+    // AI difficulty buttons
+    std::vector<Button> m_difficultyButtons;
+    AIDifficulty m_selectedDifficulty;
+    
+    Color m_playerColor;
+    
+    // AI state
+    bool m_aiThinking;
+    Color m_aiColor;
     
     static constexpr int WINDOW_WIDTH = 1000;
     static constexpr int WINDOW_HEIGHT = 850;

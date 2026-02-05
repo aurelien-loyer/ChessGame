@@ -3,8 +3,20 @@
 #include "Types.hpp"
 #include "Board.hpp"
 #include <vector>
+#include <array>
 
 namespace Chess {
+
+// Structure pour stocker toutes les informations nécessaires à l'annulation d'un coup
+struct MoveRecord {
+    Move move;
+    Piece capturedPiece;
+    Piece movedPiece;
+    Position enPassantTarget;
+    std::array<bool, 4> castlingRights;
+    bool wasEnPassantCapture;
+    Position enPassantCapturePos;
+};
 
 class ChessLogic {
 public:
@@ -31,13 +43,16 @@ public:
     // Get current turn
     Color getCurrentTurn() const { return m_currentTurn; }
     
+    // Get all legal moves for a specific color (for AI)
+    std::vector<Move> getAllLegalMoves(Color color) const;
+    
     // Check if position is attacked by a color
     bool isAttacked(const Position& pos, Color byColor) const;
 
 private:
     Board& m_board;
     Color m_currentTurn;
-    std::vector<std::pair<Move, Piece>> m_moveHistory; // Move and captured piece
+    std::vector<MoveRecord> m_moveHistory;
     
     // Generate pseudo-legal moves (before checking if king is in check)
     std::vector<Move> getPseudoLegalMoves(const Position& pos) const;

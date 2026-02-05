@@ -35,6 +35,8 @@ public:
     bool canCastleKingside(Color color) const;
     bool canCastleQueenside(Color color) const;
     void disableCastling(Color color, bool kingside);
+    std::array<bool, 4> getCastlingRights() const { return m_castlingRights; }
+    void setCastlingRights(const std::array<bool, 4>& rights) { m_castlingRights = rights; }
 
 private:
     std::array<std::array<Piece, 8>, 8> m_board;
