@@ -12,21 +12,21 @@ SoundManager::SoundManager() : m_volume(50.0f) {
     samples.clear();
     generateTone(samples, 800, 0.05f, 0.3f);
     generateTone(samples, 600, 0.03f, 0.2f);
-    m_moveBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
+    (void)m_moveBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
     
     // Generate capture sound (stronger impact)
     samples.clear();
     generateTone(samples, 300, 0.08f, 0.5f);
     generateTone(samples, 200, 0.1f, 0.4f);
     generateTone(samples, 150, 0.05f, 0.2f);
-    m_captureBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
+    (void)m_captureBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
     
     // Generate check sound (alert)
     samples.clear();
     generateTone(samples, 880, 0.1f, 0.4f);
     generateTone(samples, 1100, 0.1f, 0.5f);
     generateTone(samples, 880, 0.15f, 0.3f);
-    m_checkBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
+    (void)m_checkBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
     
     // Generate game over sound (fanfare)
     samples.clear();
@@ -34,17 +34,17 @@ SoundManager::SoundManager() : m_volume(50.0f) {
     generateTone(samples, 659, 0.15f, 0.4f);  // E
     generateTone(samples, 784, 0.15f, 0.4f);  // G
     generateTone(samples, 1047, 0.3f, 0.5f);  // C (octave)
-    m_gameOverBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
+    (void)m_gameOverBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
     
     // Generate menu click sound
     samples.clear();
     generateClick(samples);
-    m_menuClickBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
+    (void)m_menuClickBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
     
     // Generate menu hover sound (soft blip)
     samples.clear();
     generateTone(samples, 1200, 0.03f, 0.15f);
-    m_menuHoverBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
+    (void)m_menuHoverBuffer.loadFromSamples(samples.data(), samples.size(), 1, SAMPLE_RATE, channelMap);
 }
 
 void SoundManager::generateTone(std::vector<std::int16_t>& samples, float frequency, float duration, float volume) {
