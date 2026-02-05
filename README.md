@@ -25,7 +25,6 @@ Un jeu d'échecs complet avec interface graphique en C++ utilisant SFML.
 ## Prérequis
 
 - macOS 10.15 ou plus récent
-- CMake 3.16 ou plus récent
 - SFML 2.5 ou plus récent
 - Compilateur C++17 (Clang/GCC)
 
@@ -111,13 +110,12 @@ echecs/
 │   ├── Renderer.hpp    # Rendu graphique
 │   └── Game.hpp        # Boucle de jeu principale
 ├── src/
-│   ├── main.cpp
-│   ├── Piece.cpp
-│   ├── Board.cpp
-│   ├── ChessLogic.cpp
-│   ├── Renderer.cpp
-│   └── Game.cpp
-└── resources/          # Ressources (polices, etc.)
+    ├── main.cpp
+    ├── Piece.cpp
+    ├── Board.cpp
+    ├── ChessLogic.cpp
+    ├── Renderer.cpp
+    └── Game.cpp
 ```
 
 ## Architecture
