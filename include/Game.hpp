@@ -6,6 +6,7 @@
 #include "Renderer.hpp"
 #include "SoundManager.hpp"
 #include "AIPlayer.hpp"
+#include "NetworkManager.hpp"
 #include <SFML/Graphics.hpp>
 #include <memory>
 #include <optional>
@@ -34,7 +35,16 @@ enum class TimeOption {
 // Mode de jeu
 enum class GameMode {
     PlayerVsPlayer,
-    PlayerVsAI
+    PlayerVsAI,
+    Online
+};
+
+// Sous-état du menu réseau
+enum class NetworkMenuState {
+    ModeSelect,  // Choix host/join
+    Hosting,     // En attente d'un adversaire
+    Joining,     // Saisie d'IP
+    Connecting   // Tentative de connexion
 };
 
 class Game {
@@ -72,6 +82,12 @@ private:
     // AI functions
     void makeAIMove();
     void updateAI();
+    
+    // Network functions
+    void updateNetwork();
+    void drawNetworkLobby();
+    void handleNetworkMenuClick(int x, int y);
+    void handleTextInput(std::uint32_t unicode);
 
 private:
     std::unique_ptr<sf::RenderWindow> m_window;
@@ -120,6 +136,17 @@ private:
     // AI state
     bool m_aiThinking;
     Color m_aiColor;
+    
+    // Network
+    std::unique_ptr<NetworkManager> m_network;
+    NetworkMenuState m_networkMenuState;
+    std::string m_ipInput;
+    Button m_hostButton;
+    Button m_joinButton;
+    Button m_onlineButton;
+    Button m_connectButton;
+    Button m_backButton;
+    std::string m_networkStatus;
     
     static constexpr int WINDOW_WIDTH = 1000;
     static constexpr int WINDOW_HEIGHT = 850;
