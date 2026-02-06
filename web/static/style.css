@@ -493,24 +493,30 @@ body {
     line-height: 1;
     pointer-events: none;
     transition: transform 0.1s;
+    font-weight: bold;
 }
 .piece.white-piece {
     color: #fff;
     text-shadow:
-        -1px -1px 0 #333,
-         1px -1px 0 #333,
-        -1px  1px 0 #333,
-         1px  1px 0 #333,
-         0   -1px 0 #333,
-         0    1px 0 #333,
-        -1px  0   0 #333,
-         1px  0   0 #333;
-    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+        -2px -2px 0 #000,
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000,
+         0   -2px 0 #000,
+         0    2px 0 #000,
+        -2px  0   0 #000,
+         2px  0   0 #000,
+        -1px -1px 0 #000,
+         1px -1px 0 #000,
+        -1px  1px 0 #000,
+         1px  1px 0 #000;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
 }
 .piece.black-piece {
-    color: #222;
-    text-shadow: none;
-    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+    color: #1a1a1a;
+    text-shadow: 
+        0 1px 3px rgba(255,255,255,0.2);
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
 }
 
 /* Board labels */
