@@ -208,12 +208,18 @@ async def health_handler(request):
     return web.Response(text="OK")
 
 
+# --- Index page ---
+async def index_handler(request):
+    return web.FileResponse(STATIC_DIR / "index.html")
+
+
 # --- App factory ---
 def create_app():
     app = web.Application()
-    app.router.add_get("/ws", websocket_handler)
     app.router.add_get("/health", health_handler)
-    app.router.add_static("/", STATIC_DIR, show_index=True)
+    app.router.add_get("/ws", websocket_handler)
+    app.router.add_get("/", index_handler)
+    app.router.add_static("/", STATIC_DIR, show_index=False)
     return app
 
 
@@ -221,10 +227,9 @@ if __name__ == "__main__":
     print("=" * 50)
     print("  ♛  CHESS ONLINE - Serveur  ♛")
     print("=" * 50)
-    print(f"  http://localhost:{PORT}")
+    print(f"  http://0.0.0.0:{PORT}")
     print("=" * 50)
-    print("  Ctrl+C pour arrêter")
     print()
 
     app = create_app()
-    web.run_app(app, host="0.0.0.0", port=PORT, print=None)
+    web.run_app(app, host="0.0.0.0", port=PORT, access_log=None)
