@@ -572,6 +572,67 @@ class ChessEngine {
         return false;
     }
 
+    _pieceAttacksSquare(fromRow, fromCol, targetRow, targetCol, board) {
+        board = board || this.board;
+        const piece = board[fromRow][fromCol];
+        if (!piece) return false;
+
+        const dr = targetRow - fromRow;
+        const dc = targetCol - fromCol;
+        const adr = Math.abs(dr);
+        const adc = Math.abs(dc);
+
+        switch (piece.type) {
+            case 'N':
+                return (adr === 2 && adc === 1) || (adr === 1 && adc === 2);
+            case 'K':
+                return adr <= 1 && adc <= 1 && (adr + adc > 0);
+            case 'P': {
+                const pawnDir = piece.color === 'white' ? -1 : 1;
+                return dr === pawnDir && adc === 1;
+            }
+            case 'B':
+            case 'R':
+            case 'Q': {
+                const isDiag = adr === adc && adr !== 0;
+                const isStraight = (dr === 0 && adc !== 0) || (dc === 0 && adr !== 0);
+                if (piece.type === 'B' && !isDiag) return false;
+                if (piece.type === 'R' && !isStraight) return false;
+                if (piece.type === 'Q' && !(isDiag || isStraight)) return false;
+
+                const stepR = dr === 0 ? 0 : dr / adr;
+                const stepC = dc === 0 ? 0 : dc / adc;
+                let r = fromRow + stepR;
+                let c = fromCol + stepC;
+                while (r !== targetRow || c !== targetCol) {
+                    if (board[r][c]) return false;
+                    r += stepR;
+                    c += stepC;
+                }
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    getCheckAttackers(color) {
+        const king = this._findKing(color);
+        if (!king) return [];
+        const attackers = [];
+        const opp = this._opponent(color);
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = this.board[r][c];
+                if (!p || p.color !== opp) continue;
+                if (this._pieceAttacksSquare(r, c, king.row, king.col)) {
+                    attackers.push({ row: r, col: c });
+                }
+            }
+        }
+        return attackers;
+    }
+
     getKingPosition(color) {
         return this._findKing(color);
     }

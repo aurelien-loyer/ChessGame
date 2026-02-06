@@ -94,6 +94,8 @@ export class UIManager {
     const kingPos = engine.isInCheck(engine.turn) 
       ? engine.getKingPosition(engine.turn) 
       : null;
+    const attackers = kingPos ? engine.getCheckAttackers(engine.turn) : [];
+    const attackerSet = new Set(attackers.map(a => `${a.row},${a.col}`));
     
     squares.forEach(sq => {
       const row = +sq.dataset.row;
@@ -163,6 +165,11 @@ export class UIManager {
       if (kingPos && row === kingPos.row && col === kingPos.col) {
         sq.classList.add('check-square');
       }
+
+      // Highlight attacking pieces
+      if (attackerSet.has(`${row},${col}`)) {
+        sq.classList.add('check-attacker');
+      }
     });
   }
 
@@ -212,8 +219,7 @@ export class UIManager {
     }
     
     if (engine.isInCheck(engine.turn)) {
-      this.gameStatus.textContent += ' — ÉCHEC !';
-      this.gameStatus.className = 'status-text check';
+      this.gameStatus.className = 'status-text';
     }
   }
 

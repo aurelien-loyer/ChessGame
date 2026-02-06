@@ -883,6 +883,14 @@ body {
   background: rgba(217, 72, 72, 0.55) !important;
 }
 
+.square.check-attacker {
+  box-shadow: inset 0 0 0 3px rgba(224, 168, 48, 0.7), 0 0 16px rgba(224, 168, 48, 0.35);
+}
+
+.square.check-attacker .piece {
+  filter: drop-shadow(0 0 10px rgba(224, 168, 48, 0.6));
+}
+
 .square.has-piece {
   cursor: pointer;
 }
