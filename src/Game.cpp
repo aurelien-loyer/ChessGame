@@ -17,8 +17,7 @@ Game::Game()
     , m_selectedDifficulty(AIDifficulty::Medium)
     , m_playerColor(Color::White)
     , m_aiThinking(false)
-    , m_aiColor(Color::Black)
-    , m_networkMenuState(NetworkMenuState::ModeSelect) {
+    , m_aiColor(Color::Black) {
 }
 
 Game::~Game() = default;
@@ -42,7 +41,6 @@ bool Game::initialize() {
     }
     
     m_soundManager = std::make_unique<SoundManager>();
-    m_network = std::make_unique<NetworkManager>();
     initMenuButtons();
     
     return true;
@@ -63,9 +61,9 @@ void Game::initMenuButtons() {
     m_quitButton.text = "Quitter";
     
     // Game mode buttons
-    float modeButtonWidth = 150;
+    float modeButtonWidth = 200;
     float modeButtonHeight = 50;
-    float totalModeWidth = 3 * modeButtonWidth + 2 * 15;
+    float totalModeWidth = 2 * modeButtonWidth + 15;
     float modeStartX = (WINDOW_WIDTH - totalModeWidth) / 2;
     float modeY = 280;
     
@@ -76,27 +74,6 @@ void Game::initMenuButtons() {
     m_pvaButton.bounds = sf::FloatRect(sf::Vector2f(modeStartX + modeButtonWidth + 15, modeY), sf::Vector2f(modeButtonWidth, modeButtonHeight));
     m_pvaButton.text = "Joueur vs IA";
     m_pvaButton.selected = (m_gameMode == GameMode::PlayerVsAI);
-    
-    m_onlineButton.bounds = sf::FloatRect(sf::Vector2f(modeStartX + 2 * (modeButtonWidth + 15), modeY), sf::Vector2f(modeButtonWidth, modeButtonHeight));
-    m_onlineButton.text = "En Ligne";
-    m_onlineButton.selected = (m_gameMode == GameMode::Online);
-    
-    // Network lobby buttons
-    float netBtnWidth = 200;
-    float netBtnHeight = 50;
-    float netCenterX = WINDOW_WIDTH / 2 - netBtnWidth / 2;
-    
-    m_hostButton.bounds = sf::FloatRect(sf::Vector2f(netCenterX, 350), sf::Vector2f(netBtnWidth, netBtnHeight));
-    m_hostButton.text = "Heberger";
-    
-    m_joinButton.bounds = sf::FloatRect(sf::Vector2f(netCenterX, 420), sf::Vector2f(netBtnWidth, netBtnHeight));
-    m_joinButton.text = "Rejoindre";
-    
-    m_connectButton.bounds = sf::FloatRect(sf::Vector2f(netCenterX, 450), sf::Vector2f(netBtnWidth, netBtnHeight));
-    m_connectButton.text = "Connexion";
-    
-    m_backButton.bounds = sf::FloatRect(sf::Vector2f(netCenterX, 520), sf::Vector2f(netBtnWidth, netBtnHeight));
-    m_backButton.text = "Retour";
     
     // AI Difficulty buttons
     m_difficultyButtons.clear();
@@ -166,19 +143,8 @@ void Game::processEvents() {
         else if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
             if (keyPressed->code == sf::Keyboard::Key::Escape) {
                 if (m_gameState == GameState::MainMenu) {
-                    if (m_gameMode == GameMode::Online && 
-                        m_networkMenuState != NetworkMenuState::ModeSelect) {
-                        // Retour au choix host/join
-                        m_networkMenuState = NetworkMenuState::ModeSelect;
-                        m_networkStatus = "";
-                        m_network->disconnect();
-                    } else {
-                        m_window->close();
-                    }
+                    m_window->close();
                 } else if (m_gameState == GameState::Playing || m_gameState == GameState::Check) {
-                    if (m_gameMode == GameMode::Online && m_network) {
-                        m_network->disconnect();
-                    }
                     m_gameState = GameState::MainMenu;
                 }
             } else if (keyPressed->code == sf::Keyboard::Key::R && 
@@ -196,11 +162,6 @@ void Game::processEvents() {
                 } else if (keyPressed->code == sf::Keyboard::Key::N) {
                     handlePromotion(PieceType::Knight);
                 }
-            }
-        }
-        else if (const auto* textEvent = event->getIf<sf::Event::TextEntered>()) {
-            if (m_gameState == GameState::MainMenu && m_gameMode == GameMode::Online) {
-                handleTextInput(textEvent->unicode);
             }
         }
         else if (const auto* mousePressed = event->getIf<sf::Event::MouseButtonPressed>()) {
@@ -231,22 +192,12 @@ void Game::handleMouseMove(int x, int y) {
     bool wasQuitHovered = m_quitButton.hovered;
     bool wasPvpHovered = m_pvpButton.hovered;
     bool wasPvaHovered = m_pvaButton.hovered;
-    bool wasOnlineHovered = m_onlineButton.hovered;
-    bool wasHostHovered = m_hostButton.hovered;
-    bool wasJoinHovered = m_joinButton.hovered;
-    bool wasConnectHovered = m_connectButton.hovered;
-    bool wasBackHovered = m_backButton.hovered;
     
     m_playButton.hovered = m_playButton.bounds.contains(pos);
     m_restartButton.hovered = m_restartButton.bounds.contains(pos);
     m_quitButton.hovered = m_quitButton.bounds.contains(pos);
     m_pvpButton.hovered = m_pvpButton.bounds.contains(pos);
     m_pvaButton.hovered = m_pvaButton.bounds.contains(pos);
-    m_onlineButton.hovered = m_onlineButton.bounds.contains(pos);
-    m_hostButton.hovered = m_hostButton.bounds.contains(pos);
-    m_joinButton.hovered = m_joinButton.bounds.contains(pos);
-    m_connectButton.hovered = m_connectButton.bounds.contains(pos);
-    m_backButton.hovered = m_backButton.bounds.contains(pos);
     
     bool anyTimeHovered = false;
     for (auto& btn : m_timeButtons) {
@@ -267,11 +218,6 @@ void Game::handleMouseMove(int x, int y) {
         (m_quitButton.hovered && !wasQuitHovered) ||
         (m_pvpButton.hovered && !wasPvpHovered) ||
         (m_pvaButton.hovered && !wasPvaHovered) ||
-        (m_onlineButton.hovered && !wasOnlineHovered) ||
-        (m_hostButton.hovered && !wasHostHovered) ||
-        (m_joinButton.hovered && !wasJoinHovered) ||
-        (m_connectButton.hovered && !wasConnectHovered) ||
-        (m_backButton.hovered && !wasBackHovered) ||
         anyTimeHovered || anyDiffHovered) {
         m_soundManager->playMenuHover();
     }
@@ -287,28 +233,11 @@ void Game::handleMenuClick(int x, int y) {
             m_gameMode = GameMode::PlayerVsPlayer;
             m_pvpButton.selected = true;
             m_pvaButton.selected = false;
-            m_onlineButton.selected = false;
         } else if (m_pvaButton.bounds.contains(pos)) {
             m_soundManager->playMenuClick();
             m_gameMode = GameMode::PlayerVsAI;
             m_pvpButton.selected = false;
             m_pvaButton.selected = true;
-            m_onlineButton.selected = false;
-        } else if (m_onlineButton.bounds.contains(pos)) {
-            m_soundManager->playMenuClick();
-            m_gameMode = GameMode::Online;
-            m_pvpButton.selected = false;
-            m_pvaButton.selected = false;
-            m_onlineButton.selected = true;
-            m_networkMenuState = NetworkMenuState::ModeSelect;
-            m_networkStatus = "";
-            m_ipInput = "";
-        }
-        
-        // Si mode Online, gérer le sous-menu réseau
-        if (m_gameMode == GameMode::Online) {
-            handleNetworkMenuClick(x, y);
-            return; // Ne pas traiter les autres boutons
         }
         
         // Check difficulty buttons (only if vs AI mode)
@@ -399,15 +328,9 @@ void Game::updateTimer(float dt) {
 void Game::update(float dt) {
     m_renderer->updateAnimation(dt);
     
-    // Mettre à jour le réseau même dans le menu (pour détecter les connexions)
-    if (m_gameState == GameState::MainMenu && m_gameMode == GameMode::Online && m_network) {
-        updateNetwork();
-    }
-    
     if (m_gameState == GameState::Playing || m_gameState == GameState::Check) {
         updateTimer(dt);
         updateAI();
-        updateNetwork();
         
         if (m_gameState != GameState::WhiteTimeout && m_gameState != GameState::BlackTimeout) {
             GameState newState = m_logic->getGameState();
@@ -583,12 +506,6 @@ void Game::drawMainMenu() {
     
     drawModeButton(m_pvpButton);
     drawModeButton(m_pvaButton);
-    drawModeButton(m_onlineButton);
-    
-    // Online lobby
-    if (m_gameMode == GameMode::Online) {
-        drawNetworkLobby();
-    }
     
     // AI Difficulty section (only visible when vs AI)
     if (m_gameMode == GameMode::PlayerVsAI) {
@@ -625,9 +542,6 @@ void Game::drawMainMenu() {
             m_window->draw(btnText);
         }
     }
-    
-    // Ne pas afficher time/play/quit en mode online (géré par le lobby)
-    if (m_gameMode != GameMode::Online) {
     
     // Time selection label
     sf::Text timeLabel(*font, "Temps par joueur:", 22);
@@ -701,8 +615,6 @@ void Game::drawMainMenu() {
         m_quitButton.bounds.position.y + (m_quitButton.bounds.size.y - quitBounds.size.y) / 2 - 5
     ));
     m_window->draw(quitText);
-    
-    } // fin if (m_gameMode != GameMode::Online)
 }
 
 void Game::drawGameOverMenu() {
@@ -875,13 +787,6 @@ void Game::handleClick(int x, int y) {
         return;
     }
     
-    // Block player input when it's not our turn in online mode
-    if (m_gameMode == GameMode::Online && m_network && m_network->isConnected()) {
-        if (m_logic->getCurrentTurn() != m_network->getLocalColor()) {
-            return;
-        }
-    }
-    
     Position clickedPos = m_renderer->screenToBoard(x, y);
     
     if (!clickedPos.isValid()) {
@@ -912,11 +817,6 @@ void Game::handlePromotion(PieceType type) {
     
     if (m_logic->makeMove(m_pendingPromotionMove)) {
         m_soundManager->playMove();
-        
-        // Envoyer le coup au réseau
-        if (m_gameMode == GameMode::Online && m_network && m_network->isConnected()) {
-            m_network->sendMove(m_pendingPromotionMove);
-        }
     }
     
     m_waitingForPromotion = false;
@@ -963,11 +863,6 @@ void Game::tryMove(const Position& to) {
                 } else {
                     m_soundManager->playMove();
                 }
-                
-                // Envoyer le coup au réseau
-                if (m_gameMode == GameMode::Online && m_network && m_network->isConnected()) {
-                    m_network->sendMove(move);
-                }
             }
             
             deselectPiece();
@@ -992,9 +887,6 @@ void Game::resetGame() {
         std::uniform_int_distribution<int> dist(0, 1);
         m_playerColor = (dist(rng) == 0) ? Color::White : Color::Black;
         m_aiColor = (m_playerColor == Color::White) ? Color::Black : Color::White;
-    } else if (m_gameMode == GameMode::Online && m_network) {
-        m_playerColor = m_network->getLocalColor();
-        m_aiColor = Color::None; // Pas d'IA en mode online
     } else {
         m_playerColor = Color::White;
         m_aiColor = Color::Black;
@@ -1046,278 +938,6 @@ void Game::updateAI() {
         m_aiThinking = true;
         makeAIMove();
         m_aiThinking = false;
-    }
-}
-
-// ============================================================
-// NETWORK FUNCTIONS
-// ============================================================
-
-void Game::handleTextInput(std::uint32_t unicode) {
-    if (m_networkMenuState != NetworkMenuState::Joining) return;
-    
-    if (unicode == 8) { // Backspace
-        if (!m_ipInput.empty()) {
-            m_ipInput.pop_back();
-        }
-    } else if (unicode == 13 || unicode == 10) { // Enter
-        // Tenter la connexion
-        if (!m_ipInput.empty()) {
-            m_networkStatus = "Connexion...";
-            if (m_network->joinGame(m_ipInput)) {
-                m_networkMenuState = NetworkMenuState::Connecting;
-                m_networkStatus = "Connecte ! En attente de la couleur...";
-            } else {
-                m_networkStatus = "Echec de connexion a " + m_ipInput;
-            }
-        }
-    } else if (unicode >= 32 && unicode < 127) { // Printable ASCII
-        if (m_ipInput.size() < 45) { // Max IP length
-            m_ipInput += static_cast<char>(unicode);
-        }
-    }
-}
-
-void Game::handleNetworkMenuClick(int x, int y) {
-    sf::Vector2f pos(static_cast<float>(x), static_cast<float>(y));
-    
-    switch (m_networkMenuState) {
-        case NetworkMenuState::ModeSelect: {
-            if (m_hostButton.bounds.contains(pos)) {
-                m_soundManager->playMenuClick();
-                if (m_network->hostGame()) {
-                    m_networkMenuState = NetworkMenuState::Hosting;
-                    m_networkStatus = "En attente d'un adversaire...\nIP: " + m_network->getLocalAddress() + ":" + std::to_string(m_network->getPort());
-                } else {
-                    m_networkStatus = "Erreur: impossible d'heberger.";
-                }
-            } else if (m_joinButton.bounds.contains(pos)) {
-                m_soundManager->playMenuClick();
-                m_networkMenuState = NetworkMenuState::Joining;
-                m_ipInput = "";
-                m_networkStatus = "Entrez l'adresse IP:";
-            }
-            break;
-        }
-        case NetworkMenuState::Joining: {
-            if (m_connectButton.bounds.contains(pos) && !m_ipInput.empty()) {
-                m_soundManager->playMenuClick();
-                m_networkStatus = "Connexion...";
-                if (m_network->joinGame(m_ipInput)) {
-                    m_networkMenuState = NetworkMenuState::Connecting;
-                    m_networkStatus = "Connecte ! En attente...";
-                } else {
-                    m_networkStatus = "Echec de connexion a " + m_ipInput;
-                }
-            }
-            if (m_backButton.bounds.contains(pos)) {
-                m_soundManager->playMenuClick();
-                m_networkMenuState = NetworkMenuState::ModeSelect;
-                m_networkStatus = "";
-                m_network->disconnect();
-            }
-            break;
-        }
-        case NetworkMenuState::Hosting: {
-            if (m_backButton.bounds.contains(pos)) {
-                m_soundManager->playMenuClick();
-                m_networkMenuState = NetworkMenuState::ModeSelect;
-                m_networkStatus = "";
-                m_network->disconnect();
-            }
-            break;
-        }
-        case NetworkMenuState::Connecting: {
-            if (m_backButton.bounds.contains(pos)) {
-                m_soundManager->playMenuClick();
-                m_networkMenuState = NetworkMenuState::ModeSelect;
-                m_networkStatus = "";
-                m_network->disconnect();
-            }
-            break;
-        }
-    }
-}
-
-void Game::drawNetworkLobby() {
-    const sf::Font* font = m_renderer->getFont();
-    if (!font) return;
-    
-    auto drawBtn = [&](const Button& btn, sf::Color baseColor, sf::Color hoverColor) {
-        sf::Color c = btn.hovered ? hoverColor : baseColor;
-        sf::RectangleShape shape(sf::Vector2f(btn.bounds.size.x, btn.bounds.size.y));
-        shape.setPosition(sf::Vector2f(btn.bounds.position.x, btn.bounds.position.y));
-        shape.setFillColor(c);
-        shape.setOutlineColor(sf::Color(80, 80, 80));
-        shape.setOutlineThickness(2);
-        m_window->draw(shape);
-        
-        sf::Text text(*font, btn.text, 20);
-        text.setFillColor(sf::Color::White);
-        text.setStyle(sf::Text::Bold);
-        sf::FloatRect tb = text.getLocalBounds();
-        text.setPosition(sf::Vector2f(
-            btn.bounds.position.x + (btn.bounds.size.x - tb.size.x) / 2,
-            btn.bounds.position.y + (btn.bounds.size.y - tb.size.y) / 2 - 3
-        ));
-        m_window->draw(text);
-    };
-    
-    switch (m_networkMenuState) {
-        case NetworkMenuState::ModeSelect: {
-            drawBtn(m_hostButton, sf::Color(50, 120, 180), sf::Color(70, 150, 210));
-            drawBtn(m_joinButton, sf::Color(50, 120, 180), sf::Color(70, 150, 210));
-            break;
-        }
-        case NetworkMenuState::Hosting: {
-            // Afficher le statut
-            sf::Text statusText(*font, m_networkStatus, 20);
-            statusText.setFillColor(sf::Color(100, 200, 255));
-            sf::FloatRect sb = statusText.getLocalBounds();
-            statusText.setPosition(sf::Vector2f((WINDOW_WIDTH - sb.size.x) / 2, 370));
-            m_window->draw(statusText);
-            
-            // Animation d'attente
-            static float dots = 0;
-            dots += 0.02f;
-            int numDots = static_cast<int>(dots) % 4;
-            std::string waiting = "Patience";
-            for (int i = 0; i < numDots; ++i) waiting += ".";
-            
-            sf::Text waitText(*font, waiting, 18);
-            waitText.setFillColor(sf::Color(180, 180, 180));
-            sf::FloatRect wb = waitText.getLocalBounds();
-            waitText.setPosition(sf::Vector2f((WINDOW_WIDTH - wb.size.x) / 2, 420));
-            m_window->draw(waitText);
-            
-            // Bouton retour
-            m_backButton.bounds = sf::FloatRect(
-                sf::Vector2f(WINDOW_WIDTH / 2 - 100, 480),
-                sf::Vector2f(200, 50));
-            drawBtn(m_backButton, sf::Color(150, 60, 60), sf::Color(180, 80, 80));
-            break;
-        }
-        case NetworkMenuState::Joining: {
-            // Label
-            sf::Text label(*font, "Adresse IP du serveur:", 20);
-            label.setFillColor(sf::Color(200, 200, 200));
-            sf::FloatRect lb = label.getLocalBounds();
-            label.setPosition(sf::Vector2f((WINDOW_WIDTH - lb.size.x) / 2, 350));
-            m_window->draw(label);
-            
-            // Champ de saisie
-            float inputW = 350;
-            float inputH = 45;
-            float inputX = (WINDOW_WIDTH - inputW) / 2;
-            float inputY = 385;
-            
-            sf::RectangleShape inputBg(sf::Vector2f(inputW, inputH));
-            inputBg.setPosition(sf::Vector2f(inputX, inputY));
-            inputBg.setFillColor(sf::Color(50, 50, 60));
-            inputBg.setOutlineColor(sf::Color(100, 180, 255));
-            inputBg.setOutlineThickness(2);
-            m_window->draw(inputBg);
-            
-            // Texte saisi avec curseur clignotant
-            static float cursorTimer = 0;
-            cursorTimer += 0.016f;
-            std::string displayText = m_ipInput;
-            if (static_cast<int>(cursorTimer * 2) % 2 == 0) {
-                displayText += "|";
-            }
-            
-            sf::Text inputText(*font, displayText, 22);
-            inputText.setFillColor(sf::Color::White);
-            inputText.setPosition(sf::Vector2f(inputX + 10, inputY + 8));
-            m_window->draw(inputText);
-            
-            // Bouton connecter
-            m_connectButton.bounds = sf::FloatRect(
-                sf::Vector2f(WINDOW_WIDTH / 2 - 100, 450),
-                sf::Vector2f(200, 45));
-            drawBtn(m_connectButton, sf::Color(50, 120, 180), sf::Color(70, 150, 210));
-            
-            // Bouton retour
-            m_backButton.bounds = sf::FloatRect(
-                sf::Vector2f(WINDOW_WIDTH / 2 - 100, 510),
-                sf::Vector2f(200, 45));
-            drawBtn(m_backButton, sf::Color(150, 60, 60), sf::Color(180, 80, 80));
-            
-            // Status
-            if (!m_networkStatus.empty() && m_networkStatus != "Entrez l'adresse IP:") {
-                sf::Text statusText(*font, m_networkStatus, 16);
-                statusText.setFillColor(sf::Color(255, 150, 100));
-                sf::FloatRect stb = statusText.getLocalBounds();
-                statusText.setPosition(sf::Vector2f((WINDOW_WIDTH - stb.size.x) / 2, 570));
-                m_window->draw(statusText);
-            }
-            break;
-        }
-        case NetworkMenuState::Connecting: {
-            sf::Text statusText(*font, m_networkStatus, 22);
-            statusText.setFillColor(sf::Color(100, 255, 150));
-            sf::FloatRect sb = statusText.getLocalBounds();
-            statusText.setPosition(sf::Vector2f((WINDOW_WIDTH - sb.size.x) / 2, 380));
-            m_window->draw(statusText);
-            
-            m_backButton.bounds = sf::FloatRect(
-                sf::Vector2f(WINDOW_WIDTH / 2 - 100, 450),
-                sf::Vector2f(200, 50));
-            drawBtn(m_backButton, sf::Color(150, 60, 60), sf::Color(180, 80, 80));
-            break;
-        }
-    }
-}
-
-void Game::updateNetwork() {
-    if (m_gameMode != GameMode::Online || !m_network) return;
-    
-    m_network->update();
-    
-    // Si on est dans le menu et la connexion vient de s'établir
-    if (m_gameState == GameState::MainMenu) {
-        if (m_network->isConnected() && m_network->getLocalColor() != Color::None) {
-            // La couleur a été assignée, lancer la partie
-            resetGame();
-            m_gameState = GameState::Playing;
-            return;
-        }
-    }
-    
-    // En cours de partie
-    if (m_gameState == GameState::Playing || m_gameState == GameState::Check) {
-        // Vérifier si un coup a été reçu
-        auto receivedMove = m_network->getReceivedMove();
-        if (receivedMove.has_value()) {
-            const Move& move = receivedMove.value();
-            
-            bool isCapture = !m_board->getPiece(move.to).isEmpty() || move.isEnPassant;
-            Position from = move.from;
-            Position to = move.to;
-            
-            if (m_logic->makeMove(move)) {
-                m_renderer->setAnimating(true, from, to);
-                
-                if (isCapture) {
-                    m_soundManager->playCapture();
-                } else {
-                    m_soundManager->playMove();
-                }
-            }
-        }
-        
-        // Vérifier si l'adversaire a abandonné
-        if (m_network->hasOpponentResigned()) {
-            m_gameState = GameState::Checkmate; // Victoire
-            m_soundManager->playGameOver();
-        }
-        
-        // Vérifier déconnexion
-        if (m_network->hasOpponentDisconnected()) {
-            m_networkStatus = "Adversaire deconnecte.";
-            m_gameState = GameState::Checkmate;
-            m_soundManager->playGameOver();
-        }
     }
 }
 

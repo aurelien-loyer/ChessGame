@@ -3,7 +3,7 @@ CXX = c++
 
 CXXFLAGS = -std=c++17 -O2 -Wall -Wextra -I/opt/homebrew/include -Iinclude
 
-LDFLAGS = -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -lsfml-network
+LDFLAGS = -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
 
 SRCDIR = src
 

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>♛ Échecs en Ligne</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- LOBBY -->
+    <div id="lobby" class="screen active">
+        <div class="lobby-container">
+            <h1>♛ ÉCHECS <span class="subtitle">en ligne</span></h1>
+            <div class="chess-icons">♔ ♕ ♖ ♗ ♘ ♙</div>
+
+            <div class="lobby-actions">
+                <div class="time-selection">
+                    <label>Temps par joueur :</label>
+                    <div class="time-buttons" id="time-buttons">
+                        <button class="time-btn" data-time="0">Sans timer</button>
+                        <button class="time-btn" data-time="60">1 min</button>
+                        <button class="time-btn" data-time="180">3 min</button>
+                        <button class="time-btn active" data-time="300">5 min</button>
+                        <button class="time-btn" data-time="600">10 min</button>
+                        <button class="time-btn" data-time="900">15 min</button>
+                        <button class="time-btn" data-time="1800">30 min</button>
+                    </div>
+                </div>
+
+                <button id="btn-create" class="btn btn-primary">
+                    <span class="btn-icon">⚔</span>
+                    Créer une partie
+                </button>
+
+                <div class="separator">
+                    <span>ou</span>
+                </div>
+
+                <div class="join-section">
+                    <input type="text" id="input-room" placeholder="Code du salon (ex: AB12C)"
+                           maxlength="5" autocomplete="off" spellcheck="false">
+                    <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
+                </div>
+            </div>
+
+            <div id="lobby-status" class="status-message hidden"></div>
+
+            <!-- Waiting screen (after creating) -->
+            <div id="waiting-panel" class="hidden">
+                <div class="room-code-display">
+                    <p>Code du salon :</p>
+                    <div id="display-room-code" class="room-code">-----</div>
+                    <button id="btn-copy-code" class="btn btn-small" title="Copier le code">📋 Copier</button>
+                </div>
+                <div class="waiting-animation">
+                    <div class="spinner"></div>
+                    <p>En attente d'un adversaire...</p>
+                </div>
+                <button id="btn-cancel" class="btn btn-danger">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME -->
+    <div id="game" class="screen">
+        <div class="game-layout">
+            <!-- Info panel left -->
+            <div class="info-panel">
+                <div class="player-info opponent">
+                    <div class="player-indicator" id="opponent-indicator"></div>
+                    <span class="player-label" id="opponent-label">Adversaire</span>
+                    <span class="player-timer" id="opponent-timer"></span>
+                </div>
+
+                <div class="game-status" id="game-status">En attente...</div>
+
+                <div class="move-history" id="move-history">
+                    <h3>Historique</h3>
+                    <div class="moves-list" id="moves-list"></div>
+                </div>
+
+                <div class="game-actions">
+                    <button id="btn-resign" class="btn btn-danger">🏳 Abandonner</button>
+                    <button id="btn-back-menu" class="btn btn-secondary hidden">↩ Menu</button>
+                </div>
+
+                <div class="player-info self">
+                    <div class="player-indicator" id="self-indicator"></div>
+                    <span class="player-label" id="self-label">Vous</span>
+                    <span class="player-timer" id="self-timer"></span>
+                </div>
+            </div>
+
+            <!-- Chess board -->
+            <div class="board-wrapper">
+                <div class="board-labels top" id="labels-top"></div>
+                <div class="board-with-rows">
+                    <div class="board-labels left" id="labels-left"></div>
+                    <div class="board-container" id="board"></div>
+                    <div class="board-labels right" id="labels-right"></div>
+                </div>
+                <div class="board-labels bottom" id="labels-bottom"></div>
+            </div>
+        </div>
+
+        <!-- Promotion dialog -->
+        <div id="promotion-dialog" class="modal hidden">
+            <div class="modal-content">
+                <h3>Promotion du pion</h3>
+                <div class="promotion-choices" id="promotion-choices"></div>
+            </div>
+        </div>
+
+        <!-- Game over overlay -->
+        <div id="game-over" class="modal hidden">
+            <div class="modal-content">
+                <h2 id="game-over-title">Partie terminée</h2>
+                <p id="game-over-message"></p>
+                <button id="btn-new-game" class="btn btn-primary">Nouvelle partie</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="chess.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
