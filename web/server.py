@@ -227,9 +227,17 @@ if __name__ == "__main__":
     print("=" * 50)
     print("  ♛  CHESS ONLINE - Serveur  ♛")
     print("=" * 50)
-    print(f"  http://0.0.0.0:{PORT}")
+    print(f"  PORT detected: {PORT}")
+    print(f"  Binding to: http://0.0.0.0:{PORT}")
     print("=" * 50)
     print()
 
     app = create_app()
-    web.run_app(app, host="0.0.0.0", port=PORT, access_log=None)
+    # Démarrage avec logs explicites pour Render
+    web.run_app(
+        app, 
+        host="0.0.0.0", 
+        port=PORT,
+        print=lambda msg: print(f"[aiohttp] {msg}"),
+        access_log=None
+    )

@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8080
+# Le port sera fourni par la variable d'environnement PORT par Render
+# (ne pas fixer le port avec EXPOSE dans ce cas)
 
 CMD ["python", "server.py"]
