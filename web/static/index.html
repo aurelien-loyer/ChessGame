@@ -12,80 +12,125 @@
     <!-- ===== LOBBY ===== -->
     <div id="lobby" class="screen active">
         <div class="lobby-box">
-            <div class="logo">♛</div>
-            <h1>Chess<span>Arena</span></h1>
-            <p class="subtitle">Jouez en ligne ou contre l'IA</p>
 
-            <div class="lobby-content" id="lobby-content">
-                <!-- Mode -->
-                <div class="btn-group">
-                    <button class="chip active" data-mode="online">🌐 En ligne</button>
-                    <button class="chip" data-mode="ai">🤖 Contre l'IA</button>
+            <!-- Header -->
+            <div class="lobby-header">
+                <div class="lobby-logo">
+                    <span class="logo-piece">♚</span>
+                    <span class="logo-piece accent">♛</span>
+                </div>
+                <h1>Chess<span>Arena</span></h1>
+                <p class="tagline">La stratégie à portée de clic</p>
+            </div>
+
+            <!-- Card -->
+            <div class="lobby-card" id="lobby-content">
+
+                <!-- Mode selector -->
+                <div class="mode-switch">
+                    <button class="mode-btn active" data-mode="online">
+                        <span class="mode-icon">🌐</span>
+                        <span class="mode-text">En ligne</span>
+                    </button>
+                    <button class="mode-btn" data-mode="ai">
+                        <span class="mode-icon">🤖</span>
+                        <span class="mode-text">Contre l'IA</span>
+                    </button>
+                    <div class="mode-slider"></div>
                 </div>
 
-                <!-- Time -->
-                <div class="section">
-                    <div class="section-label">⏱ Cadence</div>
-                    <div class="btn-group">
-                        <button class="chip-sm" data-time="0">∞</button>
-                        <button class="chip-sm" data-time="60">1'</button>
-                        <button class="chip-sm" data-time="180">3'</button>
-                        <button class="chip-sm active" data-time="300">5'</button>
-                        <button class="chip-sm" data-time="600">10'</button>
-                        <button class="chip-sm" data-time="900">15'</button>
-                        <button class="chip-sm" data-time="1800">30'</button>
+                <!-- Time control -->
+                <div class="field">
+                    <label class="field-label">⏱ Cadence</label>
+                    <div class="time-grid">
+                        <button class="time-btn" data-time="0">∞</button>
+                        <button class="time-btn" data-time="60">1 min</button>
+                        <button class="time-btn" data-time="180">3 min</button>
+                        <button class="time-btn active" data-time="300">5 min</button>
+                        <button class="time-btn" data-time="600">10 min</button>
+                        <button class="time-btn" data-time="900">15 min</button>
+                        <button class="time-btn" data-time="1800">30 min</button>
                     </div>
                 </div>
 
+                <!-- Separator -->
+                <hr class="sep">
+
                 <!-- Online actions -->
-                <div id="online-actions">
-                    <button id="btn-create" class="btn-main">⚔ Créer une partie</button>
-                    <div class="divider"><span>ou</span></div>
+                <div id="online-actions" class="actions-panel">
+                    <button id="btn-create" class="btn-play">
+                        <span class="btn-play-icon">♜</span>
+                        Créer une partie
+                    </button>
+
+                    <div class="or-divider"><span>ou rejoindre</span></div>
+
                     <div class="join-row">
                         <input type="text" id="input-room" placeholder="CODE" maxlength="5" autocomplete="off" spellcheck="false">
-                        <button id="btn-join" class="btn-accent">→</button>
+                        <button id="btn-join" class="btn-join-go">Rejoindre</button>
                     </div>
                 </div>
 
                 <!-- AI actions -->
-                <div id="ai-actions" class="hidden">
-                    <div class="section">
-                        <div class="section-label">🎯 Difficulté</div>
-                        <div class="btn-group">
-                            <button class="chip-sm diff" data-diff="1"><i class="dot green"></i>Facile</button>
-                            <button class="chip-sm diff active" data-diff="2"><i class="dot yellow"></i>Moyen</button>
-                            <button class="chip-sm diff" data-diff="3"><i class="dot orange"></i>Difficile</button>
-                            <button class="chip-sm diff" data-diff="4"><i class="dot red"></i>Expert</button>
+                <div id="ai-actions" class="actions-panel hidden">
+                    <div class="field">
+                        <label class="field-label">🎯 Difficulté</label>
+                        <div class="diff-grid">
+                            <button class="diff-btn diff" data-diff="1">
+                                <span class="diff-dot" style="background:#81b64c"></span>Facile
+                            </button>
+                            <button class="diff-btn diff active" data-diff="2">
+                                <span class="diff-dot" style="background:#e0a830"></span>Moyen
+                            </button>
+                            <button class="diff-btn diff" data-diff="3">
+                                <span class="diff-dot" style="background:#e07830"></span>Difficile
+                            </button>
+                            <button class="diff-btn diff" data-diff="4">
+                                <span class="diff-dot" style="background:#d94848"></span>Expert
+                            </button>
                         </div>
                     </div>
-                    <div class="section">
-                        <div class="section-label">♔ Couleur</div>
-                        <div class="btn-group">
-                            <button class="chip-sm color-pick active" data-color="white">⬜ Blancs</button>
-                            <button class="chip-sm color-pick" data-color="black">⬛ Noirs</button>
-                            <button class="chip-sm color-pick" data-color="random">🎲 Aléatoire</button>
+
+                    <div class="field">
+                        <label class="field-label">♔ Votre couleur</label>
+                        <div class="color-grid">
+                            <button class="color-btn color-pick active" data-color="white">
+                                <span class="color-preview white"></span>Blancs
+                            </button>
+                            <button class="color-btn color-pick" data-color="black">
+                                <span class="color-preview black"></span>Noirs
+                            </button>
+                            <button class="color-btn color-pick" data-color="random">
+                                🎲 Aléatoire
+                            </button>
                         </div>
                     </div>
-                    <button id="btn-play-ai" class="btn-main">🤖 Jouer</button>
+
+                    <button id="btn-play-ai" class="btn-play">
+                        <span class="btn-play-icon">♞</span>
+                        Lancer la partie
+                    </button>
                 </div>
+
             </div>
 
-            <!-- Status -->
+            <!-- Status toast -->
             <div id="lobby-status" class="toast hidden"></div>
 
-            <!-- Waiting -->
+            <!-- Waiting overlay -->
             <div id="waiting-panel" class="hidden">
-                <div class="code-display">
-                    <span class="code-label">Code du salon</span>
-                    <div id="display-room-code" class="code-value">-----</div>
-                    <button id="btn-copy-code" class="btn-sm">📋 Copier</button>
+                <div class="waiting-card">
+                    <span class="waiting-label">Code du salon</span>
+                    <div id="display-room-code" class="waiting-code">-----</div>
+                    <button id="btn-copy-code" class="btn-copy">📋 Copier le code</button>
                 </div>
-                <div class="spinner-wrap">
+                <div class="waiting-anim">
                     <div class="spinner"></div>
                     <p>En attente d'un adversaire…</p>
                 </div>
-                <button id="btn-cancel" class="btn-sm btn-red">Annuler</button>
+                <button id="btn-cancel" class="btn-cancel">✕ Annuler</button>
             </div>
+
         </div>
     </div>
 

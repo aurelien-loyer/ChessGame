@@ -118,18 +118,18 @@ function showStatus(text, type = 'info') {
 }
 
 // Time chips
-document.querySelectorAll('.chip-sm[data-time]').forEach(b => {
+document.querySelectorAll('.time-btn[data-time]').forEach(b => {
     b.addEventListener('click', () => {
-        document.querySelectorAll('.chip-sm[data-time]').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.time-btn[data-time]').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         selectedTime = parseInt(b.dataset.time);
     });
 });
 
 // Mode chips
-document.querySelectorAll('.chip[data-mode]').forEach(b => {
+document.querySelectorAll('.mode-btn[data-mode]').forEach(b => {
     b.addEventListener('click', () => {
-        document.querySelectorAll('.chip[data-mode]').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.mode-btn[data-mode]').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         gameMode = b.dataset.mode;
         $('online-actions').classList.toggle('hidden', gameMode !== 'online');
@@ -138,18 +138,18 @@ document.querySelectorAll('.chip[data-mode]').forEach(b => {
 });
 
 // Difficulty chips
-document.querySelectorAll('.chip-sm.diff').forEach(b => {
+document.querySelectorAll('.diff-btn.diff').forEach(b => {
     b.addEventListener('click', () => {
-        document.querySelectorAll('.chip-sm.diff').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.diff-btn.diff').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         aiDifficulty = parseInt(b.dataset.diff);
     });
 });
 
 // Color chips
-document.querySelectorAll('.chip-sm.color-pick').forEach(b => {
+document.querySelectorAll('.color-btn.color-pick').forEach(b => {
     b.addEventListener('click', () => {
-        document.querySelectorAll('.chip-sm.color-pick').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.color-btn.color-pick').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
     });
 });
@@ -175,7 +175,7 @@ inputRoom.addEventListener('keydown', e => { if (e.key === 'Enter') btnJoin.clic
 btnCopyCode.addEventListener('click', () => {
     navigator.clipboard.writeText(roomId).then(() => {
         btnCopyCode.textContent = '✓ Copié';
-        setTimeout(() => btnCopyCode.textContent = '📋 Copier', 2000);
+        setTimeout(() => btnCopyCode.textContent = '📋 Copier le code', 2000);
     });
 });
 
@@ -188,7 +188,7 @@ btnCancel.addEventListener('click', () => {
 
 // Play AI
 $('btn-play-ai').addEventListener('click', () => {
-    const c = document.querySelector('.color-pick.active').dataset.color;
+    const c = document.querySelector('.color-btn.color-pick.active').dataset.color;
     playerColor = c === 'random' ? (Math.random() < .5 ? 'white' : 'black') : c;
     aiColor = playerColor === 'white' ? 'black' : 'white';
     myColor = playerColor;
