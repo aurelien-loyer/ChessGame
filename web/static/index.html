@@ -14,6 +14,20 @@
             <div class="chess-icons">♔ ♕ ♖ ♗ ♘ ♙</div>
 
             <div class="lobby-actions">
+                <!-- Mode selection -->
+                <div class="mode-selection">
+                    <div class="mode-buttons">
+                        <button class="mode-btn active" data-mode="online">
+                            <span class="mode-icon">🌐</span>
+                            En ligne
+                        </button>
+                        <button class="mode-btn" data-mode="ai">
+                            <span class="mode-icon">🤖</span>
+                            Contre l'IA
+                        </button>
+                    </div>
+                </div>
+
                 <div class="time-selection">
                     <label>Temps par joueur :</label>
                     <div class="time-buttons" id="time-buttons">
@@ -27,19 +41,49 @@
                     </div>
                 </div>
 
-                <button id="btn-create" class="btn btn-primary">
-                    <span class="btn-icon">⚔</span>
-                    Créer une partie
-                </button>
+                <!-- Online mode actions -->
+                <div id="online-actions">
+                    <button id="btn-create" class="btn btn-primary">
+                        <span class="btn-icon">⚔</span>
+                        Créer une partie
+                    </button>
 
-                <div class="separator">
-                    <span>ou</span>
+                    <div class="separator">
+                        <span>ou</span>
+                    </div>
+
+                    <div class="join-section">
+                        <input type="text" id="input-room" placeholder="Code du salon (ex: AB12C)"
+                               maxlength="5" autocomplete="off" spellcheck="false">
+                        <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
+                    </div>
                 </div>
 
-                <div class="join-section">
-                    <input type="text" id="input-room" placeholder="Code du salon (ex: AB12C)"
-                           maxlength="5" autocomplete="off" spellcheck="false">
-                    <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
+                <!-- AI mode actions -->
+                <div id="ai-actions" class="hidden">
+                    <div class="difficulty-selection">
+                        <label>Difficulté :</label>
+                        <div class="difficulty-buttons">
+                            <button class="diff-btn" data-diff="1">🟢 Facile</button>
+                            <button class="diff-btn active" data-diff="2">🟡 Moyen</button>
+                            <button class="diff-btn" data-diff="3">🟠 Difficile</button>
+                            <button class="diff-btn" data-diff="4">🔴 Expert</button>
+                        </div>
+                    </div>
+
+                    <div class="color-selection">
+                        <label>Jouer avec :</label>
+                        <div class="color-buttons">
+                            <button class="color-btn active" data-color="white">♔ Blancs</button>
+                            <button class="color-btn" data-color="black">♚ Noirs</button>
+                            <button class="color-btn" data-color="random">🎲 Aléatoire</button>
+                        </div>
+                    </div>
+
+                    <button id="btn-play-ai" class="btn btn-primary">
+                        <span class="btn-icon">🤖</span>
+                        Jouer contre l'IA
+                    </button>
                 </div>
             </div>
 
@@ -122,6 +166,7 @@
     </div>
 
     <script src="chess.js"></script>
+    <script src="ai.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

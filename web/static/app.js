@@ -17,6 +17,14 @@ let blackTime = 300;
 let timerInterval = null;
 let lastTimerTick = null;
 
+// ---- État IA ----
+let gameMode = 'online';   // 'online' ou 'ai'
+let aiPlayer = null;       // instance ChessAI
+let aiDifficulty = AI_DIFFICULTY.MEDIUM;
+let aiColor = 'black';     // couleur de l'IA
+let playerColor = 'white'; // couleur du joueur humain
+let aiThinking = false;    // l'IA est en train de réfléchir
+
 // ---- Éléments DOM ----
 const lobbyScreen = document.getElementById('lobby');
 const gameScreen = document.getElementById('game');
@@ -212,6 +220,65 @@ btnCancel.addEventListener('click', () => {
     lobbyStatus.classList.add('hidden');
 });
 
+// ---- Mode selection (Online / AI) ----
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        gameMode = btn.dataset.mode;
+        document.getElementById('online-actions').classList.toggle('hidden', gameMode !== 'online');
+        document.getElementById('ai-actions').classList.toggle('hidden', gameMode !== 'ai');
+    });
+});
+
+// ---- Difficulty selection ----
+document.querySelectorAll('.diff-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        aiDifficulty = parseInt(btn.dataset.diff);
+    });
+});
+
+// ---- Color selection ----
+document.querySelectorAll('.color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    });
+});
+
+// ---- Play vs AI ----
+document.getElementById('btn-play-ai').addEventListener('click', () => {
+    const colorChoice = document.querySelector('.color-btn.active').dataset.color;
+    if (colorChoice === 'random') {
+        playerColor = Math.random() < 0.5 ? 'white' : 'black';
+    } else {
+        playerColor = colorChoice;
+    }
+    aiColor = playerColor === 'white' ? 'black' : 'white';
+    myColor = playerColor;
+    boardFlipped = (myColor === 'black');
+
+    aiPlayer = new ChessAI(aiDifficulty);
+
+    // Timer
+    if (selectedTime > 0) {
+        timerEnabled = true;
+        whiteTime = selectedTime;
+        blackTime = selectedTime;
+    } else {
+        timerEnabled = false;
+    }
+
+    startGame();
+
+    // Si l'IA joue en premier (joueur = noir), déclencher le coup IA
+    if (aiColor === 'white') {
+        makeAIMove();
+    }
+});
+
 // ---- Game ----
 function startGame() {
     engine.reset();
@@ -229,7 +296,12 @@ function startGame() {
     selfIndicator.className = 'player-indicator ' + myColor + '-piece';
     opponentIndicator.className = 'player-indicator ' + (myColor === 'white' ? 'black' : 'white') + '-piece';
     selfLabel.textContent = 'Vous (' + (myColor === 'white' ? 'Blancs' : 'Noirs') + ')';
-    opponentLabel.textContent = 'Adversaire (' + (myColor === 'white' ? 'Noirs' : 'Blancs') + ')';
+    if (gameMode === 'ai') {
+        const diffNames = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile', 4: 'Expert' };
+        opponentLabel.textContent = 'IA ' + (diffNames[aiDifficulty] || '') + ' (' + (aiColor === 'white' ? 'Blancs' : 'Noirs') + ')';
+    } else {
+        opponentLabel.textContent = 'Adversaire (' + (myColor === 'white' ? 'Noirs' : 'Blancs') + ')';
+    }
 
     // Timers
     if (timerEnabled) {
@@ -367,6 +439,7 @@ function renderBoard() {
 function onSquareClick(row, col) {
     if (engine.gameOver) return;
     if (engine.turn !== myColor) return; // Pas notre tour
+    if (aiThinking) return; // L'IA réfléchit
 
     const piece = engine.getPiece(row, col);
 
@@ -398,14 +471,16 @@ function onSquareClick(row, col) {
             const from = { ...selectedSquare };
             const to = { row, col };
             if (engine.makeMove(from, to)) {
-                // Envoyer au serveur
-                sendMessage({
-                    type: 'move',
-                    from: from,
-                    to: to,
-                    white_time: whiteTime,
-                    black_time: blackTime
-                });
+                // Envoyer au serveur (mode en ligne uniquement)
+                if (gameMode === 'online') {
+                    sendMessage({
+                        type: 'move',
+                        from: from,
+                        to: to,
+                        white_time: whiteTime,
+                        black_time: blackTime
+                    });
+                }
                 deselectPiece();
                 renderBoard();
                 updateStatus();
@@ -414,6 +489,8 @@ function onSquareClick(row, col) {
 
                 if (engine.gameOver) {
                     showGameOver();
+                } else if (gameMode === 'ai') {
+                    makeAIMove();
                 }
             }
         } else {
@@ -453,14 +530,16 @@ function showPromotionDialog(from, to) {
             promotionDialog.classList.add('hidden');
 
             if (engine.makeMove(from, to, type)) {
-                sendMessage({
-                    type: 'move',
-                    from: from,
-                    to: to,
-                    promotion: type,
-                    white_time: whiteTime,
-                    black_time: blackTime
-                });
+                if (gameMode === 'online') {
+                    sendMessage({
+                        type: 'move',
+                        from: from,
+                        to: to,
+                        promotion: type,
+                        white_time: whiteTime,
+                        black_time: blackTime
+                    });
+                }
                 deselectPiece();
                 renderBoard();
                 updateStatus();
@@ -468,6 +547,8 @@ function showPromotionDialog(from, to) {
 
                 if (engine.gameOver) {
                     showGameOver();
+                } else if (gameMode === 'ai') {
+                    makeAIMove();
                 }
             }
         });
@@ -529,7 +610,7 @@ function tickTimer() {
             engine.result = 'timeout';
             engine.winner = 'black';
             stopTimer();
-            sendMessage({ type: 'timeout', loser: 'white' });
+            if (gameMode === 'online') sendMessage({ type: 'timeout', loser: 'white' });
             updateTimerDisplay();
             showGameOver();
             return;
@@ -542,7 +623,7 @@ function tickTimer() {
             engine.result = 'timeout';
             engine.winner = 'white';
             stopTimer();
-            sendMessage({ type: 'timeout', loser: 'black' });
+            if (gameMode === 'online') sendMessage({ type: 'timeout', loser: 'black' });
             updateTimerDisplay();
             showGameOver();
             return;
@@ -565,7 +646,7 @@ function updateStatus() {
     } else {
         selfInfo.classList.remove('active-turn');
         oppInfo.classList.add('active-turn');
-        gameStatus.textContent = "Tour de l'adversaire";
+        gameStatus.textContent = gameMode === 'ai' ? "L'IA réfléchit..." : "Tour de l'adversaire";
         gameStatus.className = 'game-status';
     }
 
@@ -613,9 +694,15 @@ function showGameOver() {
         case 'checkmate': {
             const isWinner = engine.winner === myColor;
             gameOverTitle.textContent = isWinner ? '🏆 Victoire !' : '💀 Défaite';
-            gameOverMessage.textContent = isWinner
-                ? 'Vous avez mis votre adversaire échec et mat !'
-                : 'Vous êtes échec et mat.';
+            if (gameMode === 'ai') {
+                gameOverMessage.textContent = isWinner
+                    ? 'Vous avez mis l\'IA échec et mat !'
+                    : 'L\'IA vous a mis échec et mat.';
+            } else {
+                gameOverMessage.textContent = isWinner
+                    ? 'Vous avez mis votre adversaire échec et mat !'
+                    : 'Vous êtes échec et mat.';
+            }
             break;
         }
         case 'stalemate':
@@ -628,7 +715,7 @@ function showGameOver() {
             break;
         case 'resign':
             gameOverTitle.textContent = '🏆 Victoire !';
-            gameOverMessage.textContent = "Votre adversaire a abandonné.";
+            gameOverMessage.textContent = gameMode === 'ai' ? "L'IA a abandonné." : "Votre adversaire a abandonné.";
             break;
         case 'disconnect':
             gameOverTitle.textContent = '🏆 Victoire';
@@ -637,9 +724,15 @@ function showGameOver() {
         case 'timeout': {
             const isWinner = engine.winner === myColor;
             gameOverTitle.textContent = isWinner ? '🏆 Victoire !' : '⏱ Temps écoulé';
-            gameOverMessage.textContent = isWinner
-                ? 'Votre adversaire a dépassé le temps !'
-                : 'Votre temps est écoulé.';
+            if (gameMode === 'ai') {
+                gameOverMessage.textContent = isWinner
+                    ? 'L\'IA a dépassé le temps !'
+                    : 'Votre temps est écoulé.';
+            } else {
+                gameOverMessage.textContent = isWinner
+                    ? 'Votre adversaire a dépassé le temps !'
+                    : 'Votre temps est écoulé.';
+            }
             break;
         }
     }
@@ -647,7 +740,9 @@ function showGameOver() {
 
 btnResign.addEventListener('click', () => {
     if (confirm('Voulez-vous vraiment abandonner ?')) {
-        sendMessage({ type: 'resign' });
+        if (gameMode === 'online') {
+            sendMessage({ type: 'resign' });
+        }
         engine.gameOver = true;
         engine.result = 'resign';
         engine.winner = myColor === 'white' ? 'black' : 'white';
@@ -668,9 +763,37 @@ btnNewGame.addEventListener('click', () => {
     backToLobby();
 });
 
+// ---- AI Move ----
+function makeAIMove() {
+    if (engine.gameOver || engine.turn !== aiColor) return;
+
+    aiThinking = true;
+    updateStatus();
+
+    // Utiliser setTimeout pour ne pas bloquer le rendu
+    setTimeout(() => {
+        const bestMove = aiPlayer.findBestMove(engine, aiColor);
+        if (bestMove) {
+            engine.makeMove(bestMove.from, bestMove.to, bestMove.promotion || undefined);
+            renderBoard();
+            updateStatus();
+            updateMoveHistory();
+            updateTimerDisplay();
+
+            if (engine.gameOver) {
+                showGameOver();
+            }
+        }
+        aiThinking = false;
+        updateStatus();
+    }, 100);
+}
+
 function backToLobby() {
     stopTimer();
     if (ws) ws.close();
+    aiPlayer = null;
+    aiThinking = false;
     gameScreen.classList.remove('active');
     lobbyScreen.classList.add('active');
     waitingPanel.classList.add('hidden');
