@@ -231,6 +231,14 @@ if __name__ == "__main__":
     print(f"  Binding to: http://0.0.0.0:{PORT}")
     print("=" * 50)
     print()
+    print("Application loading")
+    print()
 
     app = create_app()
-    web.run_app(app, host="0.0.0.0", port=PORT)
+    web.run_app(
+        app, 
+        host="0.0.0.0", 
+        port=PORT,
+        print=lambda x: print(f"[SERVER] {x}") if x else None,
+        access_log=None
+    )
