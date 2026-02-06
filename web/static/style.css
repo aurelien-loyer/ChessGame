@@ -980,6 +980,36 @@ body {
   margin-bottom: 10px;
 }
 
+/* --- Game Over Side Panel --- */
+#game-over.overlay {
+  background: transparent;
+  backdrop-filter: none;
+  justify-content: flex-end;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+#game-over .dialog {
+  pointer-events: all;
+  margin: 20px;
+  max-width: 320px;
+  background: var(--bg2);
+  border: 2px solid var(--accent);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 16px rgba(129, 182, 76, 0.3);
+  animation: slideInRight 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* --- Promotion Picker --- */
 .promo-row {
   display: flex;
