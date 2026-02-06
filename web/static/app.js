@@ -1,31 +1,52 @@
 /**
- * app.js - Interface et logique réseau pour le jeu d'échecs en ligne.
+ * app.js - Chess Arena — Interface & Network Logic
  */
 
-// ---- État global ----
+// ---- Particles ----
+(function initParticles() {
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 30; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.style.left = Math.random() * 100 + '%';
+        p.style.animationDelay = Math.random() * 12 + 's';
+        p.style.animationDuration = (8 + Math.random() * 8) + 's';
+        p.style.width = p.style.height = (2 + Math.random() * 3) + 'px';
+        container.appendChild(p);
+    }
+})();
+
+// ---- Global State ----
 let ws = null;
 let engine = new ChessEngine();
-let myColor = null;        // 'white' ou 'black'
+let myColor = null;
 let roomId = null;
-let selectedSquare = null; // { row, col }
-let legalMoves = [];       // coups légaux pour la pièce sélectionnée
+let selectedSquare = null;
+let legalMoves = [];
 let boardFlipped = false;
-let selectedTime = 300;    // temps sélectionné en secondes (défaut: 5 min)
+let selectedTime = 300;
 let timerEnabled = true;
 let whiteTime = 300;
 let blackTime = 300;
 let timerInterval = null;
 let lastTimerTick = null;
 
-// ---- État IA ----
-let gameMode = 'online';   // 'online' ou 'ai'
-let aiPlayer = null;       // instance ChessAI
+// ---- AI State ----
+let gameMode = 'online';
+let aiPlayer = null;
 let aiDifficulty = AI_DIFFICULTY.MEDIUM;
-let aiColor = 'black';     // couleur de l'IA
-let playerColor = 'white'; // couleur du joueur humain
-let aiThinking = false;    // l'IA est en train de réfléchir
+let aiColor = 'black';
+let playerColor = 'white';
+let aiThinking = false;
 
-// ---- Éléments DOM ----
+// ---- Captured pieces tracking ----
+let capturedByWhite = []; // pieces white has captured (from black)
+let capturedByBlack = []; // pieces black has captured (from white)
+
+const PIECE_VALUES_DISPLAY = { 'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0 };
+const PIECE_ORDER = ['Q', 'R', 'B', 'N', 'P'];
+
+// ---- DOM Elements ----
 const lobbyScreen = document.getElementById('lobby');
 const gameScreen = document.getElementById('game');
 const btnCreate = document.getElementById('btn-create');
@@ -47,6 +68,7 @@ const promotionChoices = document.getElementById('promotion-choices');
 const gameOverModal = document.getElementById('game-over');
 const gameOverTitle = document.getElementById('game-over-title');
 const gameOverMessage = document.getElementById('game-over-message');
+const gameOverIcon = document.getElementById('game-over-icon');
 const selfIndicator = document.getElementById('self-indicator');
 const opponentIndicator = document.getElementById('opponent-indicator');
 const selfLabel = document.getElementById('self-label');
@@ -59,19 +81,14 @@ function connectWS() {
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${protocol}://${location.host}/ws`);
 
-    ws.onopen = () => {
-        console.log('WebSocket connecté');
-    };
+    ws.onopen = () => console.log('WebSocket connecté');
 
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         handleServerMessage(msg);
     };
 
-    ws.onclose = () => {
-        console.log('WebSocket déconnecté');
-        ws = null;
-    };
+    ws.onclose = () => { console.log('WebSocket déconnecté'); ws = null; };
 
     ws.onerror = (err) => {
         console.error('WebSocket erreur:', err);
@@ -99,7 +116,6 @@ function handleServerMessage(msg) {
             myColor = msg.color;
             roomId = msg.room_id;
             boardFlipped = (myColor === 'black');
-            // Timer
             if (msg.time && msg.time > 0) {
                 timerEnabled = true;
                 selectedTime = msg.time;
@@ -112,23 +128,17 @@ function handleServerMessage(msg) {
             break;
 
         case 'move':
-            // Appliquer le coup de l'adversaire
-            const from = msg.from;
-            const to = msg.to;
-            engine.applyNetworkMove(from, to, msg.promotion || null);
-            // Synchroniser les timers si envoyés
+            engine.applyNetworkMove(msg.from, msg.to, msg.promotion || null);
             if (msg.white_time !== undefined) {
                 whiteTime = msg.white_time;
                 blackTime = msg.black_time;
             }
+            updateCapturedPieces();
             renderBoard();
             updateStatus();
             updateMoveHistory();
             updateTimerDisplay();
-            if (engine.gameOver) {
-                stopTimer();
-                showGameOver();
-            }
+            if (engine.gameOver) { stopTimer(); showGameOver(); }
             break;
 
         case 'opponent_resigned':
@@ -209,7 +219,7 @@ inputRoom.addEventListener('keydown', (e) => {
 btnCopyCode.addEventListener('click', () => {
     navigator.clipboard.writeText(roomId).then(() => {
         btnCopyCode.textContent = '✓ Copié !';
-        setTimeout(() => { btnCopyCode.textContent = '📋 Copier'; }, 2000);
+        setTimeout(() => { btnCopyCode.textContent = '📋 Copier le code'; }, 2000);
     });
 });
 
@@ -262,7 +272,6 @@ document.getElementById('btn-play-ai').addEventListener('click', () => {
 
     aiPlayer = new ChessAI(aiDifficulty);
 
-    // Timer
     if (selectedTime > 0) {
         timerEnabled = true;
         whiteTime = selectedTime;
@@ -273,7 +282,6 @@ document.getElementById('btn-play-ai').addEventListener('click', () => {
 
     startGame();
 
-    // Si l'IA joue en premier (joueur = noir), déclencher le coup IA
     if (aiColor === 'white') {
         makeAIMove();
     }
@@ -284,6 +292,8 @@ function startGame() {
     engine.reset();
     selectedSquare = null;
     legalMoves = [];
+    capturedByWhite = [];
+    capturedByBlack = [];
 
     lobbyScreen.classList.remove('active');
     gameScreen.classList.add('active');
@@ -292,7 +302,7 @@ function startGame() {
     btnResign.classList.remove('hidden');
     movesList.innerHTML = '';
 
-    // Couleurs des joueurs
+    // Player colors
     selfIndicator.className = 'player-indicator ' + myColor + '-piece';
     opponentIndicator.className = 'player-indicator ' + (myColor === 'white' ? 'black' : 'white') + '-piece';
     selfLabel.textContent = 'Vous (' + (myColor === 'white' ? 'Blancs' : 'Noirs') + ')';
@@ -314,6 +324,7 @@ function startGame() {
         opponentTimer.classList.add('hidden');
     }
 
+    updateCapturedDisplay();
     buildBoard();
     renderBoard();
     updateStatus();
@@ -322,7 +333,6 @@ function startGame() {
 function buildBoard() {
     boardEl.innerHTML = '';
 
-    // Labels
     const files = 'abcdefgh';
     const labelsTop = document.getElementById('labels-top');
     const labelsBottom = document.getElementById('labels-bottom');
@@ -379,10 +389,8 @@ function renderBoard() {
         const col = parseInt(sq.dataset.col);
         const piece = engine.getPiece(row, col);
 
-        // Reset classes
         sq.className = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
 
-        // Pièce
         sq.innerHTML = '';
         if (piece) {
             sq.classList.add('has-piece');
@@ -392,12 +400,10 @@ function renderBoard() {
             sq.appendChild(span);
         }
 
-        // Sélection
         if (selectedSquare && row === selectedSquare.row && col === selectedSquare.col) {
             sq.classList.add('selected');
         }
 
-        // Dernier coup
         if (engine.lastMove) {
             if ((row === engine.lastMove.from.row && col === engine.lastMove.from.col) ||
                 (row === engine.lastMove.to.row && col === engine.lastMove.to.col)) {
@@ -405,7 +411,6 @@ function renderBoard() {
             }
         }
 
-        // Coups légaux
         const isLegal = legalMoves.some(m => m.to.row === row && m.to.col === col);
         if (isLegal) {
             if (piece) {
@@ -415,7 +420,7 @@ function renderBoard() {
             }
         }
 
-        // En passant: marquer la case cible comme capturable
+        // En passant
         if (selectedSquare) {
             const selPiece = engine.getPiece(selectedSquare.row, selectedSquare.col);
             if (selPiece && selPiece.type === 'P') {
@@ -429,7 +434,6 @@ function renderBoard() {
             }
         }
 
-        // Échec
         if (kingPos && row === kingPos.row && col === kingPos.col) {
             sq.classList.add('check-square');
         }
@@ -438,31 +442,26 @@ function renderBoard() {
 
 function onSquareClick(row, col) {
     if (engine.gameOver) return;
-    if (engine.turn !== myColor) return; // Pas notre tour
-    if (aiThinking) return; // L'IA réfléchit
+    if (engine.turn !== myColor) return;
+    if (aiThinking) return;
 
     const piece = engine.getPiece(row, col);
 
-    // Si une pièce est sélectionnée, essayer de jouer
     if (selectedSquare) {
-        // Clic sur la même case → désélectionner
         if (row === selectedSquare.row && col === selectedSquare.col) {
             deselectPiece();
             renderBoard();
             return;
         }
 
-        // Clic sur une autre pièce de notre couleur → sélectionner celle-ci
         if (piece && piece.color === myColor) {
             selectPiece(row, col);
             renderBoard();
             return;
         }
 
-        // Essayer le coup
         const move = legalMoves.find(m => m.to.row === row && m.to.col === col);
         if (move) {
-            // Promotion ?
             if (move.promotion) {
                 showPromotionDialog(selectedSquare, { row, col });
                 return;
@@ -471,7 +470,6 @@ function onSquareClick(row, col) {
             const from = { ...selectedSquare };
             const to = { row, col };
             if (engine.makeMove(from, to)) {
-                // Envoyer au serveur (mode en ligne uniquement)
                 if (gameMode === 'online') {
                     sendMessage({
                         type: 'move',
@@ -482,6 +480,7 @@ function onSquareClick(row, col) {
                     });
                 }
                 deselectPiece();
+                updateCapturedPieces();
                 renderBoard();
                 updateStatus();
                 updateMoveHistory();
@@ -498,7 +497,6 @@ function onSquareClick(row, col) {
             renderBoard();
         }
     } else {
-        // Sélectionner une pièce
         if (piece && piece.color === myColor) {
             selectPiece(row, col);
             renderBoard();
@@ -514,6 +512,60 @@ function selectPiece(row, col) {
 function deselectPiece() {
     selectedSquare = null;
     legalMoves = [];
+}
+
+// ---- Captured Pieces & Material Advantage ----
+function updateCapturedPieces() {
+    capturedByWhite = [];
+    capturedByBlack = [];
+
+    for (const move of engine.moveHistory) {
+        if (move.captured) {
+            if (move.color === 'white') {
+                capturedByWhite.push(move.captured);
+            } else {
+                capturedByBlack.push(move.captured);
+            }
+        }
+    }
+
+    updateCapturedDisplay();
+}
+
+function updateCapturedDisplay() {
+    const selfCapturedList = document.getElementById('self-captured-list');
+    const opponentCapturedList = document.getElementById('opponent-captured-list');
+    const selfAdvantage = document.getElementById('self-advantage');
+    const opponentAdvantage = document.getElementById('opponent-advantage');
+
+    const myCaptured = myColor === 'white' ? capturedByWhite : capturedByBlack;
+    const oppCaptured = myColor === 'white' ? capturedByBlack : capturedByWhite;
+
+    // Sort captures by piece value
+    const sortCaptures = (arr) => [...arr].sort((a, b) =>
+        PIECE_ORDER.indexOf(a) - PIECE_ORDER.indexOf(b)
+    );
+
+    const renderPieces = (list, color) => {
+        const sorted = sortCaptures(list);
+        return sorted.map(type => {
+            const sym = PIECE_SYMBOLS[type][color];
+            return `<span style="opacity:0.85">${sym}</span>`;
+        }).join('');
+    };
+
+    // My captured = pieces I took from opponent
+    const oppColor = myColor === 'white' ? 'black' : 'white';
+    selfCapturedList.innerHTML = renderPieces(myCaptured, oppColor);
+    opponentCapturedList.innerHTML = renderPieces(oppCaptured, myColor);
+
+    // Material advantage
+    const myMaterial = myCaptured.reduce((sum, t) => sum + PIECE_VALUES_DISPLAY[t], 0);
+    const oppMaterial = oppCaptured.reduce((sum, t) => sum + PIECE_VALUES_DISPLAY[t], 0);
+    const diff = myMaterial - oppMaterial;
+
+    selfAdvantage.textContent = diff > 0 ? '+' + diff : '';
+    opponentAdvantage.textContent = diff < 0 ? '+' + Math.abs(diff) : '';
 }
 
 // ---- Promotion ----
@@ -541,6 +593,7 @@ function showPromotionDialog(from, to) {
                     });
                 }
                 deselectPiece();
+                updateCapturedPieces();
                 renderBoard();
                 updateStatus();
                 updateMoveHistory();
@@ -573,7 +626,6 @@ function updateTimerDisplay() {
     selfTimer.textContent = formatTime(myTime);
     opponentTimer.textContent = formatTime(oppTime);
 
-    // Low time warning (< 30s)
     selfTimer.classList.toggle('low-time', myTime < 30 && myTime > 0);
     opponentTimer.classList.toggle('low-time', oppTime < 30 && oppTime > 0);
 }
@@ -601,7 +653,6 @@ function tickTimer() {
     const dt = (now - lastTimerTick) / 1000;
     lastTimerTick = now;
 
-    // Décrémenter le timer du joueur actif
     if (engine.turn === 'white') {
         whiteTime -= dt;
         if (whiteTime <= 0) {
@@ -635,24 +686,24 @@ function tickTimer() {
 
 // ---- Status ----
 function updateStatus() {
-    const selfInfo = document.querySelector('.player-info.self');
-    const oppInfo = document.querySelector('.player-info.opponent');
+    const selfBar = document.querySelector('.player-bar.self');
+    const oppBar = document.querySelector('.player-bar.opponent');
 
     if (engine.turn === myColor) {
-        selfInfo.classList.add('active-turn');
-        oppInfo.classList.remove('active-turn');
-        gameStatus.textContent = 'À vous de jouer';
-        gameStatus.className = 'game-status';
+        selfBar.classList.add('active-turn');
+        oppBar.classList.remove('active-turn');
+        gameStatus.textContent = '🎯 À vous de jouer';
+        gameStatus.className = 'game-status-bar';
     } else {
-        selfInfo.classList.remove('active-turn');
-        oppInfo.classList.add('active-turn');
-        gameStatus.textContent = gameMode === 'ai' ? "L'IA réfléchit..." : "Tour de l'adversaire";
-        gameStatus.className = 'game-status';
+        selfBar.classList.remove('active-turn');
+        oppBar.classList.add('active-turn');
+        gameStatus.textContent = gameMode === 'ai' ? "🤖 L'IA réfléchit..." : "⏳ Tour de l'adversaire";
+        gameStatus.className = 'game-status-bar';
     }
 
     if (engine.isInCheck(engine.turn)) {
-        gameStatus.textContent += ' — ÉCHEC !';
-        gameStatus.className = 'game-status check';
+        gameStatus.textContent += ' — ⚠️ ÉCHEC !';
+        gameStatus.className = 'game-status-bar check';
     }
 }
 
@@ -693,7 +744,9 @@ function showGameOver() {
     switch (engine.result) {
         case 'checkmate': {
             const isWinner = engine.winner === myColor;
-            gameOverTitle.textContent = isWinner ? '🏆 Victoire !' : '💀 Défaite';
+            gameOverIcon.textContent = isWinner ? '🏆' : '💀';
+            gameOverTitle.textContent = isWinner ? 'Victoire !' : 'Défaite';
+            gameOverTitle.style.color = isWinner ? 'var(--green)' : 'var(--danger)';
             if (gameMode === 'ai') {
                 gameOverMessage.textContent = isWinner
                     ? 'Vous avez mis l\'IA échec et mat !'
@@ -706,24 +759,34 @@ function showGameOver() {
             break;
         }
         case 'stalemate':
-            gameOverTitle.textContent = '🤝 Pat';
+            gameOverIcon.textContent = '🤝';
+            gameOverTitle.textContent = 'Pat';
+            gameOverTitle.style.color = 'var(--warning)';
             gameOverMessage.textContent = 'Match nul par pat.';
             break;
         case 'draw':
-            gameOverTitle.textContent = '🤝 Nulle';
+            gameOverIcon.textContent = '🤝';
+            gameOverTitle.textContent = 'Nulle';
+            gameOverTitle.style.color = 'var(--warning)';
             gameOverMessage.textContent = 'Match nul par matériel insuffisant.';
             break;
         case 'resign':
-            gameOverTitle.textContent = '🏆 Victoire !';
+            gameOverIcon.textContent = '🏆';
+            gameOverTitle.textContent = 'Victoire !';
+            gameOverTitle.style.color = 'var(--green)';
             gameOverMessage.textContent = gameMode === 'ai' ? "L'IA a abandonné." : "Votre adversaire a abandonné.";
             break;
         case 'disconnect':
-            gameOverTitle.textContent = '🏆 Victoire';
+            gameOverIcon.textContent = '🔌';
+            gameOverTitle.textContent = 'Victoire';
+            gameOverTitle.style.color = 'var(--green)';
             gameOverMessage.textContent = "Votre adversaire s'est déconnecté.";
             break;
         case 'timeout': {
             const isWinner = engine.winner === myColor;
-            gameOverTitle.textContent = isWinner ? '🏆 Victoire !' : '⏱ Temps écoulé';
+            gameOverIcon.textContent = isWinner ? '🏆' : '⏱';
+            gameOverTitle.textContent = isWinner ? 'Victoire !' : 'Temps écoulé';
+            gameOverTitle.style.color = isWinner ? 'var(--green)' : 'var(--danger)';
             if (gameMode === 'ai') {
                 gameOverMessage.textContent = isWinner
                     ? 'L\'IA a dépassé le temps !'
@@ -747,7 +810,9 @@ btnResign.addEventListener('click', () => {
         engine.result = 'resign';
         engine.winner = myColor === 'white' ? 'black' : 'white';
 
-        gameOverTitle.textContent = '🏳 Abandon';
+        gameOverIcon.textContent = '🏳';
+        gameOverTitle.textContent = 'Abandon';
+        gameOverTitle.style.color = 'var(--danger)';
         gameOverMessage.textContent = 'Vous avez abandonné la partie.';
         gameOverModal.classList.remove('hidden');
         btnResign.classList.add('hidden');
@@ -755,13 +820,8 @@ btnResign.addEventListener('click', () => {
     }
 });
 
-btnBackMenu.addEventListener('click', () => {
-    backToLobby();
-});
-
-btnNewGame.addEventListener('click', () => {
-    backToLobby();
-});
+btnBackMenu.addEventListener('click', () => backToLobby());
+btnNewGame.addEventListener('click', () => backToLobby());
 
 // ---- AI Move ----
 function makeAIMove() {
@@ -770,11 +830,11 @@ function makeAIMove() {
     aiThinking = true;
     updateStatus();
 
-    // Utiliser setTimeout pour ne pas bloquer le rendu
     setTimeout(() => {
         const bestMove = aiPlayer.findBestMove(engine, aiColor);
         if (bestMove) {
             engine.makeMove(bestMove.from, bestMove.to, bestMove.promotion || undefined);
+            updateCapturedPieces();
             renderBoard();
             updateStatus();
             updateMoveHistory();

@@ -3,104 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>♛ Échecs en Ligne</title>
+    <title>♛ Chess Arena</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Ambient particles background -->
+    <div class="particles" id="particles"></div>
+
     <!-- LOBBY -->
     <div id="lobby" class="screen active">
         <div class="lobby-container">
-            <h1>♛ ÉCHECS <span class="subtitle">en ligne</span></h1>
-            <div class="chess-icons">♔ ♕ ♖ ♗ ♘ ♙</div>
+            <div class="logo-section">
+                <div class="logo-icon">♛</div>
+                <h1>Chess <span class="gradient-text">Arena</span></h1>
+                <p class="tagline">Affrontez des joueurs ou défiez l'IA</p>
+            </div>
 
-            <div class="lobby-actions">
-                <!-- Mode selection -->
-                <div class="mode-selection">
-                    <div class="mode-buttons">
-                        <button class="mode-btn active" data-mode="online">
-                            <span class="mode-icon">🌐</span>
-                            En ligne
-                        </button>
-                        <button class="mode-btn" data-mode="ai">
-                            <span class="mode-icon">🤖</span>
-                            Contre l'IA
-                        </button>
-                    </div>
-                </div>
-
-                <div class="time-selection">
-                    <label>Temps par joueur :</label>
-                    <div class="time-buttons" id="time-buttons">
-                        <button class="time-btn" data-time="0">Sans timer</button>
-                        <button class="time-btn" data-time="60">1 min</button>
-                        <button class="time-btn" data-time="180">3 min</button>
-                        <button class="time-btn active" data-time="300">5 min</button>
-                        <button class="time-btn" data-time="600">10 min</button>
-                        <button class="time-btn" data-time="900">15 min</button>
-                        <button class="time-btn" data-time="1800">30 min</button>
-                    </div>
-                </div>
-
-                <!-- Online mode actions -->
-                <div id="online-actions">
-                    <button id="btn-create" class="btn btn-primary">
-                        <span class="btn-icon">⚔</span>
-                        Créer une partie
-                    </button>
-
-                    <div class="separator">
-                        <span>ou</span>
-                    </div>
-
-                    <div class="join-section">
-                        <input type="text" id="input-room" placeholder="Code du salon (ex: AB12C)"
-                               maxlength="5" autocomplete="off" spellcheck="false">
-                        <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
-                    </div>
-                </div>
-
-                <!-- AI mode actions -->
-                <div id="ai-actions" class="hidden">
-                    <div class="difficulty-selection">
-                        <label>Difficulté :</label>
-                        <div class="difficulty-buttons">
-                            <button class="diff-btn" data-diff="1">🟢 Facile</button>
-                            <button class="diff-btn active" data-diff="2">🟡 Moyen</button>
-                            <button class="diff-btn" data-diff="3">🟠 Difficile</button>
-                            <button class="diff-btn" data-diff="4">🔴 Expert</button>
+            <div class="lobby-card">
+                <div class="lobby-actions">
+                    <!-- Mode selection -->
+                    <div class="mode-selection">
+                        <div class="mode-buttons">
+                            <button class="mode-btn active" data-mode="online">
+                                <span class="mode-icon">🌐</span>
+                                <span class="mode-label">En ligne</span>
+                                <span class="mode-desc">Jouez contre un ami</span>
+                            </button>
+                            <button class="mode-btn" data-mode="ai">
+                                <span class="mode-icon">🤖</span>
+                                <span class="mode-label">Contre l'IA</span>
+                                <span class="mode-desc">Testez vos compétences</span>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="color-selection">
-                        <label>Jouer avec :</label>
-                        <div class="color-buttons">
-                            <button class="color-btn active" data-color="white">♔ Blancs</button>
-                            <button class="color-btn" data-color="black">♚ Noirs</button>
-                            <button class="color-btn" data-color="random">🎲 Aléatoire</button>
+                    <div class="time-selection">
+                        <label><span class="label-icon">⏱</span> Cadence</label>
+                        <div class="time-buttons" id="time-buttons">
+                            <button class="time-btn" data-time="0">∞</button>
+                            <button class="time-btn" data-time="60">1'</button>
+                            <button class="time-btn" data-time="180">3'</button>
+                            <button class="time-btn active" data-time="300">5'</button>
+                            <button class="time-btn" data-time="600">10'</button>
+                            <button class="time-btn" data-time="900">15'</button>
+                            <button class="time-btn" data-time="1800">30'</button>
                         </div>
                     </div>
 
-                    <button id="btn-play-ai" class="btn btn-primary">
-                        <span class="btn-icon">🤖</span>
-                        Jouer contre l'IA
-                    </button>
+                    <!-- Online mode actions -->
+                    <div id="online-actions">
+                        <button id="btn-create" class="btn btn-primary btn-glow">
+                            <span class="btn-icon">⚔</span>
+                            Créer une partie
+                        </button>
+
+                        <div class="separator">
+                            <span>ou rejoindre</span>
+                        </div>
+
+                        <div class="join-section">
+                            <input type="text" id="input-room" placeholder="CODE"
+                                   maxlength="5" autocomplete="off" spellcheck="false">
+                            <button id="btn-join" class="btn btn-secondary">→</button>
+                        </div>
+                    </div>
+
+                    <!-- AI mode actions -->
+                    <div id="ai-actions" class="hidden">
+                        <div class="difficulty-selection">
+                            <label><span class="label-icon">🎯</span> Difficulté</label>
+                            <div class="difficulty-buttons">
+                                <button class="diff-btn" data-diff="1">
+                                    <span class="diff-dot easy"></span>Facile
+                                </button>
+                                <button class="diff-btn active" data-diff="2">
+                                    <span class="diff-dot medium"></span>Moyen
+                                </button>
+                                <button class="diff-btn" data-diff="3">
+                                    <span class="diff-dot hard"></span>Difficile
+                                </button>
+                                <button class="diff-btn" data-diff="4">
+                                    <span class="diff-dot expert"></span>Expert
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="color-selection">
+                            <label><span class="label-icon">♔</span> Couleur</label>
+                            <div class="color-buttons">
+                                <button class="color-btn active" data-color="white">
+                                    <span class="color-preview white"></span>Blancs
+                                </button>
+                                <button class="color-btn" data-color="black">
+                                    <span class="color-preview black"></span>Noirs
+                                </button>
+                                <button class="color-btn" data-color="random">
+                                    🎲 Aléatoire
+                                </button>
+                            </div>
+                        </div>
+
+                        <button id="btn-play-ai" class="btn btn-primary btn-glow">
+                            <span class="btn-icon">🤖</span>
+                            Lancer la partie
+                        </button>
+                    </div>
+                </div>
+
+                <div id="lobby-status" class="status-message hidden"></div>
+
+                <!-- Waiting screen (after creating) -->
+                <div id="waiting-panel" class="hidden">
+                    <div class="room-code-display">
+                        <p>Partagez ce code</p>
+                        <div id="display-room-code" class="room-code">-----</div>
+                        <button id="btn-copy-code" class="btn btn-small btn-glass" title="Copier le code">
+                            📋 Copier le code
+                        </button>
+                    </div>
+                    <div class="waiting-animation">
+                        <div class="pulse-ring"></div>
+                        <div class="pulse-ring delay"></div>
+                        <div class="waiting-icon">♟</div>
+                    </div>
+                    <p class="waiting-text">En attente d'un adversaire...</p>
+                    <button id="btn-cancel" class="btn btn-danger btn-small">Annuler</button>
                 </div>
             </div>
 
-            <div id="lobby-status" class="status-message hidden"></div>
-
-            <!-- Waiting screen (after creating) -->
-            <div id="waiting-panel" class="hidden">
-                <div class="room-code-display">
-                    <p>Code du salon :</p>
-                    <div id="display-room-code" class="room-code">-----</div>
-                    <button id="btn-copy-code" class="btn btn-small" title="Copier le code">📋 Copier</button>
-                </div>
-                <div class="waiting-animation">
-                    <div class="spinner"></div>
-                    <p>En attente d'un adversaire...</p>
-                </div>
-                <button id="btn-cancel" class="btn btn-danger">Annuler</button>
+            <div class="lobby-footer">
+                <span class="footer-piece">♔</span>
+                <span class="footer-piece">♕</span>
+                <span class="footer-piece">♖</span>
+                <span class="footer-piece">♗</span>
+                <span class="footer-piece">♘</span>
+                <span class="footer-piece">♙</span>
             </div>
         </div>
     </div>
@@ -108,59 +147,90 @@
     <!-- GAME -->
     <div id="game" class="screen">
         <div class="game-layout">
-            <!-- Info panel left -->
-            <div class="info-panel">
-                <div class="player-info opponent">
-                    <div class="player-indicator" id="opponent-indicator"></div>
-                    <span class="player-label" id="opponent-label">Adversaire</span>
-                    <span class="player-timer" id="opponent-timer"></span>
-                </div>
-
-                <div class="game-status" id="game-status">En attente...</div>
-
-                <div class="move-history" id="move-history">
-                    <h3>Historique</h3>
-                    <div class="moves-list" id="moves-list"></div>
-                </div>
-
-                <div class="game-actions">
-                    <button id="btn-resign" class="btn btn-danger">🏳 Abandonner</button>
-                    <button id="btn-back-menu" class="btn btn-secondary hidden">↩ Menu</button>
-                </div>
-
-                <div class="player-info self">
-                    <div class="player-indicator" id="self-indicator"></div>
-                    <span class="player-label" id="self-label">Vous</span>
-                    <span class="player-timer" id="self-timer"></span>
-                </div>
+            <!-- Top bar -->
+            <div class="game-top-bar">
+                <button id="btn-back-menu" class="btn btn-icon-only btn-glass hidden" title="Menu">
+                    ↩
+                </button>
+                <div class="game-status-bar" id="game-status">En attente...</div>
+                <button id="btn-resign" class="btn btn-icon-only btn-danger-subtle" title="Abandonner">
+                    🏳
+                </button>
             </div>
 
-            <!-- Chess board -->
-            <div class="board-wrapper">
-                <div class="board-labels top" id="labels-top"></div>
-                <div class="board-with-rows">
-                    <div class="board-labels left" id="labels-left"></div>
-                    <div class="board-container" id="board"></div>
-                    <div class="board-labels right" id="labels-right"></div>
+            <div class="game-main">
+                <!-- Info panel left -->
+                <div class="info-panel">
+                    <!-- Opponent captured pieces -->
+                    <div class="captured-pieces" id="opponent-captured">
+                        <div class="captured-list" id="opponent-captured-list"></div>
+                        <div class="material-advantage" id="opponent-advantage"></div>
+                    </div>
+
+                    <div class="move-history" id="move-history">
+                        <div class="move-history-header">
+                            <h3>📜 Historique</h3>
+                        </div>
+                        <div class="moves-list" id="moves-list"></div>
+                    </div>
+
+                    <!-- Self captured pieces -->
+                    <div class="captured-pieces" id="self-captured">
+                        <div class="captured-list" id="self-captured-list"></div>
+                        <div class="material-advantage" id="self-advantage"></div>
+                    </div>
                 </div>
-                <div class="board-labels bottom" id="labels-bottom"></div>
+
+                <!-- Board section -->
+                <div class="board-section">
+                    <!-- Opponent bar -->
+                    <div class="player-bar opponent">
+                        <div class="player-indicator" id="opponent-indicator"></div>
+                        <span class="player-label" id="opponent-label">Adversaire</span>
+                        <span class="player-timer" id="opponent-timer"></span>
+                    </div>
+
+                    <!-- Chess board -->
+                    <div class="board-wrapper">
+                        <div class="board-labels top" id="labels-top"></div>
+                        <div class="board-with-rows">
+                            <div class="board-labels left" id="labels-left"></div>
+                            <div class="board-container" id="board"></div>
+                            <div class="board-labels right" id="labels-right"></div>
+                        </div>
+                        <div class="board-labels bottom" id="labels-bottom"></div>
+                    </div>
+
+                    <!-- Self bar -->
+                    <div class="player-bar self">
+                        <div class="player-indicator" id="self-indicator"></div>
+                        <span class="player-label" id="self-label">Vous</span>
+                        <span class="player-timer" id="self-timer"></span>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Promotion dialog -->
         <div id="promotion-dialog" class="modal hidden">
-            <div class="modal-content">
-                <h3>Promotion du pion</h3>
+            <div class="modal-content glass-card">
+                <h3>Promotion</h3>
+                <p class="modal-subtitle">Choisissez votre pièce</p>
                 <div class="promotion-choices" id="promotion-choices"></div>
             </div>
         </div>
 
         <!-- Game over overlay -->
         <div id="game-over" class="modal hidden">
-            <div class="modal-content">
+            <div class="modal-content glass-card game-over-card">
+                <div class="game-over-icon" id="game-over-icon">🏆</div>
                 <h2 id="game-over-title">Partie terminée</h2>
                 <p id="game-over-message"></p>
-                <button id="btn-new-game" class="btn btn-primary">Nouvelle partie</button>
+                <div class="game-over-actions">
+                    <button id="btn-new-game" class="btn btn-primary btn-glow">
+                        Nouvelle partie
+                    </button>
+                </div>
             </div>
         </div>
     </div>
