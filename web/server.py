@@ -233,11 +233,4 @@ if __name__ == "__main__":
     print()
 
     app = create_app()
-    # Démarrage avec logs explicites pour Render
-    web.run_app(
-        app, 
-        host="0.0.0.0", 
-        port=PORT,
-        print=lambda msg: print(f"[aiohttp] {msg}"),
-        access_log=None
-    )
+    web.run_app(app, host="0.0.0.0", port=PORT)
