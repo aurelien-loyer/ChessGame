@@ -21,6 +21,11 @@ STATIC_DIR = Path(__file__).parent / "static"
 # --- Rooms ---
 rooms = {}  # room_id -> Room
 
+# --- Matchmaking Queue ---
+# time_limit -> list of (ws, asyncio.Future)
+matchmaking_queue = {}
+matchmaking_lock = asyncio.Lock()
+
 
 class Room:
     """Représente un salon de jeu avec deux joueurs."""
@@ -75,6 +80,7 @@ async def websocket_handler(request):
     await ws.prepare(request)
 
     current_room = None
+    in_matchmaking = False
 
     try:
         async for raw_message in ws:
@@ -136,6 +142,83 @@ async def websocket_handler(request):
                             "time": room.time_limit
                         })
 
+                elif msg_type == "matchmaking_join":
+                    time_limit = msg.get("time", 300)
+                    in_matchmaking = True
+
+                    async with matchmaking_lock:
+                        queue = matchmaking_queue.setdefault(time_limit, [])
+
+                        # Clean stale entries (closed connections)
+                        queue[:] = [(w, f) for w, f in queue if not w.closed and not f.done()]
+
+                        # Check if someone is already waiting with same time
+                        if queue:
+                            opponent_ws, opponent_future = queue.pop(0)
+
+                            # Verify opponent is still connected
+                            if opponent_ws.closed:
+                                # Opponent gone, add self to queue
+                                future = asyncio.get_event_loop().create_future()
+                                queue.append((ws, future))
+
+                                await ws.send_json({
+                                    "type": "matchmaking_waiting",
+                                    "queue_size": len(queue)
+                                })
+                            else:
+                                # Match found! Create a room
+                                room_id = generate_room_id()
+                                while room_id in rooms:
+                                    room_id = generate_room_id()
+
+                                room = Room(room_id, opponent_ws, time_limit)
+                                room.add_guest(ws)
+                                rooms[room_id] = room
+                                current_room = room
+
+                                room.assign_colors()
+                                in_matchmaking = False
+
+                                # Notify both players
+                                for player_ws, color in room.players.items():
+                                    try:
+                                        await player_ws.send_json({
+                                            "type": "game_start",
+                                            "color": color,
+                                            "room_id": room_id,
+                                            "time": room.time_limit,
+                                            "matchmade": True
+                                        })
+                                    except Exception:
+                                        pass
+
+                                # Resolve the opponent's future so they know
+                                if not opponent_future.done():
+                                    opponent_future.set_result(room)
+                        else:
+                            # No one waiting, add to queue
+                            future = asyncio.get_event_loop().create_future()
+                            queue.append((ws, future))
+
+                            await ws.send_json({
+                                "type": "matchmaking_waiting",
+                                "queue_size": len(queue)
+                            })
+
+                            # Wait for match asynchronously (non-blocking)
+                            # The match will be resolved by the next player joining
+
+                elif msg_type == "matchmaking_cancel":
+                    in_matchmaking = False
+                    async with matchmaking_lock:
+                        for time_limit, queue in matchmaking_queue.items():
+                            queue[:] = [(w, f) for w, f in queue if w != ws]
+
+                    await ws.send_json({
+                        "type": "matchmaking_cancelled"
+                    })
+
                 elif msg_type == "move":
                     if current_room and current_room.started:
                         opponent = current_room.get_opponent(ws)
@@ -185,6 +268,12 @@ async def websocket_handler(request):
     except Exception:
         pass
     finally:
+        # Remove from matchmaking queue if needed
+        if in_matchmaking:
+            async with matchmaking_lock:
+                for time_limit, queue in matchmaking_queue.items():
+                    queue[:] = [(w, f) for w, f in queue if w != ws]
+
         if current_room:
             opponent = current_room.get_opponent(ws)
             current_room.remove_player(ws)

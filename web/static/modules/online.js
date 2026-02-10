@@ -16,6 +16,11 @@ export class OnlineGame {
     this.roomId = null;
     this.myColor = null;
     
+    // Matchmaking
+    this.isMatchmaking = false;
+    this.mmElapsedInterval = null;
+    this.mmStartTime = null;
+    
     // Timer
     this.timerEnabled = true;
     this.whiteTime = 300;
@@ -26,6 +31,7 @@ export class OnlineGame {
     // DOM
     this.lobbyContent = $('lobby-content');
     this.waitingPanel = $('waiting-panel');
+    this.matchmakingPanel = $('matchmaking-panel');
     this.displayRoomCode = $('display-room-code');
     this.lobbyStatus = $('lobby-status');
     this.btnResign = $('btn-resign');
@@ -88,6 +94,12 @@ export class OnlineGame {
         this.roomId = msg.room_id;
         this.ui.boardFlipped = this.myColor === 'black';
         
+        // Stop matchmaking if active
+        if (this.isMatchmaking) {
+          this.isMatchmaking = false;
+          this.stopMatchmakingTimer();
+        }
+        
         if (msg.time > 0) {
           this.timerEnabled = true;
           this.whiteTime = msg.time;
@@ -142,6 +154,16 @@ export class OnlineGame {
       case 'error':
         showToast(this.lobbyStatus, msg.message, 'error');
         break;
+        
+      case 'matchmaking_waiting':
+        console.log('[Online] In matchmaking queue, size:', msg.queue_size);
+        break;
+        
+      case 'matchmaking_cancelled':
+        console.log('[Online] Matchmaking cancelled');
+        this.isMatchmaking = false;
+        this.stopMatchmakingTimer();
+        break;
     }
   }
 
@@ -171,6 +193,61 @@ export class OnlineGame {
         this.send({ type: 'join_room', room_id: roomCode });
       }
     }, 100);
+  }
+
+  /**
+   * Start matchmaking
+   */
+  startMatchmaking(timeLimit) {
+    this.isMatchmaking = true;
+    this.connect();
+    
+    const checkConnection = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        clearInterval(checkConnection);
+        this.send({ type: 'matchmaking_join', time: timeLimit });
+        this.startMatchmakingTimer();
+      }
+    }, 100);
+  }
+
+  /**
+   * Cancel matchmaking
+   */
+  cancelMatchmaking() {
+    this.isMatchmaking = false;
+    this.stopMatchmakingTimer();
+    this.send({ type: 'matchmaking_cancel' });
+    
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+
+  /**
+   * Start matchmaking elapsed timer
+   */
+  startMatchmakingTimer() {
+    this.mmStartTime = Date.now();
+    const elapsedEl = $('mm-elapsed');
+    
+    this.mmElapsedInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - this.mmStartTime) / 1000);
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      elapsedEl.textContent = `${mins}:${String(secs).padStart(2, '0')}`;
+    }, 1000);
+  }
+
+  /**
+   * Stop matchmaking elapsed timer
+   */
+  stopMatchmakingTimer() {
+    if (this.mmElapsedInterval) {
+      clearInterval(this.mmElapsedInterval);
+      this.mmElapsedInterval = null;
+    }
   }
 
   /**
@@ -390,6 +467,8 @@ export class OnlineGame {
    */
   cleanup() {
     this.stopTimer();
+    this.stopMatchmakingTimer();
+    this.isMatchmaking = false;
     
     if (this.ws) {
       this.ws.close();

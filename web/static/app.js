@@ -38,6 +38,7 @@ class ChessApp {
     this.gameScreen = $('game');
     this.lobbyContent = $('lobby-content');
     this.waitingPanel = $('waiting-panel');
+    this.matchmakingPanel = $('matchmaking-panel');
     this.lobbyStatus = $('lobby-status');
     this.inputRoom = $('input-room');
     
@@ -81,6 +82,10 @@ class ChessApp {
     $('input-room').addEventListener('keydown', e => {
       if (e.key === 'Enter') this.joinOnlineGame();
     });
+    
+    // Matchmaking
+    $('btn-matchmaking').addEventListener('click', () => this.startMatchmaking());
+    $('btn-cancel-mm').addEventListener('click', () => this.cancelMatchmaking());
     
     // Waiting room actions
     $('btn-copy-code').addEventListener('click', () => this.copyRoomCode());
@@ -168,6 +173,45 @@ class ChessApp {
   }
 
   /**
+   * Start matchmaking
+   */
+  startMatchmaking() {
+    console.log('[App] Starting matchmaking...');
+    
+    // Update UI: show matchmaking panel
+    hide(this.lobbyContent);
+    hide(this.waitingPanel);
+    show(this.matchmakingPanel);
+    hide(this.lobbyStatus);
+    
+    // Update time display
+    const timeDisplay = $('mm-time-display');
+    if (this.selectedTime === 0) {
+      timeDisplay.textContent = '∞ Sans limite';
+    } else {
+      const mins = Math.floor(this.selectedTime / 60);
+      timeDisplay.textContent = mins + ' min';
+    }
+    
+    // Reset elapsed
+    $('mm-elapsed').textContent = '0:00';
+    
+    this.onlineGame.startMatchmaking(this.selectedTime);
+  }
+
+  /**
+   * Cancel matchmaking
+   */
+  cancelMatchmaking() {
+    console.log('[App] Cancelling matchmaking...');
+    this.onlineGame.cancelMatchmaking();
+    
+    hide(this.matchmakingPanel);
+    show(this.lobbyContent);
+    hide(this.lobbyStatus);
+  }
+
+  /**
    * Copy room code to clipboard
    */
   copyRoomCode() {
@@ -192,6 +236,7 @@ class ChessApp {
   cancelWaiting() {
     this.onlineGame.cleanup();
     hide(this.waitingPanel);
+    hide(this.matchmakingPanel);
     show(this.lobbyContent);
     hide(this.lobbyStatus);
   }
@@ -247,6 +292,7 @@ class ChessApp {
     this.lobbyScreen.classList.add('active');
     
     hide(this.waitingPanel);
+    hide(this.matchmakingPanel);
     show(this.lobbyContent);
     hide(this.lobbyStatus);
     

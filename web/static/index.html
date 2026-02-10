@@ -58,16 +58,23 @@
 
                 <!-- Online actions -->
                 <div id="online-actions" class="actions-panel">
-                    <button id="btn-create" class="btn-play">
-                        <span class="btn-play-icon">♜</span>
-                        Créer une partie
+                    <button id="btn-matchmaking" class="btn-play btn-matchmaking">
+                        <span class="btn-play-icon">⚔</span>
+                        Trouver un adversaire
                     </button>
 
-                    <div class="or-divider"><span>ou rejoindre</span></div>
+                    <div class="or-divider"><span>ou partie privée</span></div>
 
-                    <div class="join-row">
-                        <input type="text" id="input-room" placeholder="CODE" maxlength="5" autocomplete="off" spellcheck="false">
-                        <button id="btn-join" class="btn-join-go">Rejoindre</button>
+                    <div class="private-row">
+                        <button id="btn-create" class="btn-secondary">
+                            <span class="btn-sec-icon">♜</span>
+                            Créer un salon
+                        </button>
+
+                        <div class="join-row">
+                            <input type="text" id="input-room" placeholder="CODE" maxlength="5" autocomplete="off" spellcheck="false">
+                            <button id="btn-join" class="btn-join-go">Rejoindre</button>
+                        </div>
                     </div>
                 </div>
 
@@ -117,7 +124,7 @@
             <!-- Status toast -->
             <div id="lobby-status" class="toast hidden"></div>
 
-            <!-- Waiting overlay -->
+            <!-- Waiting overlay (room code) -->
             <div id="waiting-panel" class="hidden">
                 <div class="waiting-card">
                     <span class="waiting-label">Code du salon</span>
@@ -129,6 +136,28 @@
                     <p>En attente d'un adversaire…</p>
                 </div>
                 <button id="btn-cancel" class="btn-cancel">✕ Annuler</button>
+            </div>
+
+            <!-- Matchmaking waiting overlay -->
+            <div id="matchmaking-panel" class="hidden">
+                <div class="matchmaking-visual">
+                    <div class="mm-pieces">
+                        <span class="mm-piece mm-piece-left">♔</span>
+                        <div class="mm-vs">
+                            <div class="mm-spinner"></div>
+                            <span>VS</span>
+                        </div>
+                        <span class="mm-piece mm-piece-right">♚</span>
+                    </div>
+                </div>
+                <div class="mm-info">
+                    <p class="mm-status">Recherche d'un adversaire…</p>
+                    <p class="mm-detail" id="mm-detail">Cadence : <span id="mm-time-display">5 min</span></p>
+                    <div class="mm-timer-row">
+                        <span class="mm-elapsed" id="mm-elapsed">0:00</span>
+                    </div>
+                </div>
+                <button id="btn-cancel-mm" class="btn-cancel">✕ Annuler la recherche</button>
             </div>
 
         </div>
