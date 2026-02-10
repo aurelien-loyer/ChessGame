@@ -87,7 +87,7 @@ export class UIManager {
   }
 
   /**
-   * Render current board state
+   * Render current board state — optimized to reuse DOM elements
    */
   renderBoard(engine) {
     const squares = this.boardEl.querySelectorAll('.square');
@@ -97,80 +97,70 @@ export class UIManager {
     const attackers = kingPos ? engine.getCheckAttackers(engine.turn) : [];
     const attackerSet = new Set(attackers.map(a => `${a.row},${a.col}`));
     
-    squares.forEach(sq => {
+    // Pre-compute legal move targets for fast lookup
+    const legalTargets = new Set(this.legalMoves.map(m => `${m.to.row},${m.to.col}`));
+    const enPassantTargets = new Set(
+      this.legalMoves.filter(m => m.isEnPassant).map(m => `${m.to.row},${m.to.col}`)
+    );
+    
+    for (let i = 0; i < squares.length; i++) {
+      const sq = squares[i];
       const row = +sq.dataset.row;
       const col = +sq.dataset.col;
       const piece = engine.getPiece(row, col);
+      const key = `${row},${col}`;
       
-      // Reset classes
-      sq.className = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
-      sq.innerHTML = '';
+      // Build class list efficiently
+      let classes = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
       
-      // Render piece
-      if (piece) {
-        sq.classList.add('has-piece');
-        const span = document.createElement('span');
-        span.className = 'piece ' + piece.color + '-piece';
-        span.textContent = PIECE_SYMBOLS[piece.type][piece.color];
-        sq.appendChild(span);
-      }
-      
-      // Highlight selected square
-      if (this.selectedSquare && 
-          row === this.selectedSquare.row && 
-          col === this.selectedSquare.col) {
-        sq.classList.add('selected');
-      }
-      
-      // Highlight last move
-      if (engine.lastMove) {
-        const { from, to } = engine.lastMove;
-        if ((row === from.row && col === from.col) || 
-            (row === to.row && col === to.col)) {
-          sq.classList.add('last-move');
-        }
-      }
-      
-      // Show legal moves
-      const isLegalMove = this.legalMoves.some(m => 
-        m.to.row === row && m.to.col === col
+      // Check states
+      const isSelected = this.selectedSquare && 
+        row === this.selectedSquare.row && col === this.selectedSquare.col;
+      const isLastMove = engine.lastMove && (
+        (row === engine.lastMove.from.row && col === engine.lastMove.from.col) ||
+        (row === engine.lastMove.to.row && col === engine.lastMove.to.col)
       );
+      const isLegalMove = legalTargets.has(key);
+      const isEnPassant = enPassantTargets.has(key);
+      const isKingInCheck = kingPos && row === kingPos.row && col === kingPos.col;
+      const isAttacker = attackerSet.has(key);
       
-      if (isLegalMove) {
-        sq.classList.add(piece ? 'legal-capture' : 'legal-move');
-      }
+      if (piece) classes += ' has-piece';
+      if (isSelected) classes += ' selected';
+      if (isLastMove) classes += ' last-move';
+      if (isLegalMove) classes += piece || isEnPassant ? ' legal-capture' : ' legal-move';
+      if (isKingInCheck) classes += ' check-square';
+      if (isAttacker) classes += ' check-attacker';
       
-      // Special case for en passant
-      if (this.selectedSquare) {
-        const selectedPiece = engine.getPiece(
-          this.selectedSquare.row, 
-          this.selectedSquare.col
-        );
+      sq.className = classes;
+      
+      // Update piece content only if changed
+      const existingPiece = sq.firstChild;
+      if (piece) {
+        const symbol = PIECE_SYMBOLS[piece.type][piece.color];
+        const pieceClass = 'piece ' + piece.color + '-piece';
         
-        if (selectedPiece?.type === 'P') {
-          const enPassantMove = this.legalMoves.find(m => 
-            m.to.row === row && 
-            m.to.col === col && 
-            m.isEnPassant
-          );
-          
-          if (enPassantMove) {
-            sq.classList.add('legal-capture');
-            sq.classList.remove('legal-move');
+        if (existingPiece && existingPiece.tagName === 'SPAN') {
+          // Reuse existing span
+          if (existingPiece.textContent !== symbol) {
+            existingPiece.textContent = symbol;
           }
+          if (existingPiece.className !== pieceClass) {
+            existingPiece.className = pieceClass;
+          }
+        } else {
+          // Create new span only if needed
+          sq.innerHTML = '';
+          const span = document.createElement('span');
+          span.className = pieceClass;
+          span.textContent = symbol;
+          sq.appendChild(span);
         }
+      } else if (existingPiece) {
+        // Remove piece
+        sq.innerHTML = '';
       }
-      
-      // Highlight king in check
-      if (kingPos && row === kingPos.row && col === kingPos.col) {
-        sq.classList.add('check-square');
-      }
-
-      // Highlight attacking pieces
-      if (attackerSet.has(`${row},${col}`)) {
-        sq.classList.add('check-attacker');
-      }
-    });
+    }
   }
 
   /**
@@ -224,12 +214,21 @@ export class UIManager {
   }
 
   /**
-   * Update move history display
+   * Update move history display — only adds new moves, doesn't rebuild
    */
   updateMoveHistory(engine) {
-    this.movesList.innerHTML = '';
+    const historyLen = engine.moveHistory.length;
+    const existingEntries = this.movesList.children.length;
+    const expectedEntries = Math.ceil(historyLen / 2);
     
-    for (let i = 0; i < engine.moveHistory.length; i += 2) {
+    // Only rebuild if entries were removed (e.g., game reset)
+    if (existingEntries > expectedEntries) {
+      this.movesList.innerHTML = '';
+    }
+    
+    // Add missing entries
+    const startIdx = this.movesList.children.length * 2;
+    for (let i = startIdx; i < historyLen; i += 2) {
       const entry = document.createElement('div');
       entry.className = 'move-entry';
       
@@ -242,13 +241,23 @@ export class UIManager {
       whiteMove.textContent = engine.moveHistory[i].notation;
       entry.appendChild(whiteMove);
       
-      if (i + 1 < engine.moveHistory.length) {
+      if (i + 1 < historyLen) {
         const blackMove = document.createElement('span');
         blackMove.textContent = engine.moveHistory[i + 1].notation;
         entry.appendChild(blackMove);
       }
       
       this.movesList.appendChild(entry);
+    }
+    
+    // Update last entry if black just moved (add black move to existing entry)
+    if (historyLen > 0 && historyLen % 2 === 0) {
+      const lastEntry = this.movesList.lastElementChild;
+      if (lastEntry && lastEntry.children.length === 2) {
+        const blackMove = document.createElement('span');
+        blackMove.textContent = engine.moveHistory[historyLen - 1].notation;
+        lastEntry.appendChild(blackMove);
+      }
     }
     
     this.movesList.scrollTop = this.movesList.scrollHeight;

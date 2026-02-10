@@ -1023,7 +1023,6 @@ body {
   cursor: default;
   user-select: none;
   position: relative;
-  transition: background 0.1s;
   min-width: 0;
   min-height: 0;
 }
