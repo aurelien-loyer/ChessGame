@@ -382,6 +382,14 @@ body {
   gap: 8px;
 }
 
+.diff-grid-5 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.diff-grid-5 .diff-gm {
+  grid-column: 1 / -1;
+}
+
 .diff-btn {
   display: flex;
   align-items: center;
@@ -408,6 +416,23 @@ body {
   background: var(--accent-dim);
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.diff-gm {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.08), rgba(255, 107, 0, 0.08));
+  border-color: rgba(255, 180, 0, 0.3);
+}
+
+.diff-gm:hover {
+  border-color: rgba(255, 180, 0, 0.6);
+  color: #ffc107;
+}
+
+.diff-gm.active {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 107, 0, 0.2));
+  border-color: #ffc107;
+  color: #ffc107;
+  box-shadow: 0 0 12px rgba(255, 180, 0, 0.25);
 }
 
 .diff-dot {

@@ -177,7 +177,7 @@ export class UIManager {
     this.selfLabel.textContent = `Vous (${colorName})`;
     
     if (gameMode === 'ai') {
-      const diffNames = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile', 4: 'Expert' };
+      const diffNames = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile', 4: 'Expert', 5: 'Grand Maître' };
       this.opponentLabel.textContent = 'IA ' + (diffNames[aiDifficulty] || '');
     } else {
       this.opponentLabel.textContent = 'Adversaire';

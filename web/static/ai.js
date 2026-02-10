@@ -4,24 +4,28 @@
  * Utilise le ChessEngine de chess.js pour la génération de coups et le plateau.
  *
  * Niveaux :
- *   EASY   (1) — profondeur 1, évaluation basique
- *   MEDIUM (2) — profondeur 2, évaluation basique
- *   HARD   (3) — profondeur 3 + quiescence 3, évaluation avancée, time-budgeted
- *   EXPERT (4) — profondeur 4 + quiescence 4, iterative deepening, null-move, TT, time-budgeted
+ *   EASY        (1) — profondeur 1, évaluation basique
+ *   MEDIUM      (2) — profondeur 2, évaluation basique
+ *   HARD        (3) — profondeur 3 + quiescence 3, évaluation avancée, time-budgeted
+ *   EXPERT      (4) — profondeur 4 + quiescence 4, iterative deepening, null-move, TT
+ *   GRANDMASTER (5) — profondeur 6 + quiescence 8, toutes optimisations, niveau GM
  *
- * Optimisations vs version précédente :
+ * Optimisations :
  *   - Time budget : la recherche s'arrête si le temps imparti est dépassé
  *   - Node budget : hard cap sur le nombre de noeuds pour éviter les freezes
  *   - Clone léger : pas de new ChessEngine(), copie directe des champs
  *   - TT eviction LRU-approx sans allocation
  *   - Delta pruning en quiescence
+ *   - Aspiration windows (GRANDMASTER)
+ *   - Futility pruning (GRANDMASTER)
  */
 
 const AI_DIFFICULTY = {
     EASY: 1,
     MEDIUM: 2,
     HARD: 3,
-    EXPERT: 4
+    EXPERT: 4,
+    GRANDMASTER: 5
 };
 
 // ---- PST (du point de vue des blancs, row 0 = rang 8) ----
@@ -115,10 +119,17 @@ const TT_ALPHA = 1;
 const TT_BETA  = 2;
 
 class TranspositionTable {
-    constructor(maxSize = 1 << 16) { // 65k entries — keeps memory low
+    constructor(maxSize = 1 << 16) { // 65k entries default, 256k for GM
         this.maxSize = maxSize;
         this.table = new Map();
         this.gen = 0; // generation counter for aging
+    }
+
+    resize(newSize) {
+        this.maxSize = newSize;
+        if (this.table.size > newSize) {
+            this.clear();
+        }
     }
 
     _hash(engine) {
@@ -201,6 +212,7 @@ class ChessAI {
             case 2: return 1000;
             case 3: return 2000;
             case 4: return 3500;
+            case 5: return 15000;  // GRANDMASTER: 15 secondes
             default: return 1000;
         }
     }
@@ -212,6 +224,7 @@ class ChessAI {
             case 2: return 50000;
             case 3: return 300000;
             case 4: return 800000;
+            case 5: return 5000000;  // GRANDMASTER: 5 millions
             default: return 50000;
         }
     }
@@ -241,6 +254,7 @@ class ChessAI {
             case 2: return 2;
             case 3: return 3;
             case 4: return 4;
+            case 5: return 6;  // GRANDMASTER: profondeur 6
             default: return 2;
         }
     }
@@ -249,6 +263,7 @@ class ChessAI {
         switch (this.difficulty) {
             case 3: return 3;
             case 4: return 4;
+            case 5: return 8;  // GRANDMASTER: quiescence 8
             default: return 0;
         }
     }
@@ -556,17 +571,18 @@ class ChessAI {
         }
     }
 
-    // ---- Alpha-Beta advanced (Hard/Expert) ----
+    // ---- Alpha-Beta advanced (Hard/Expert/GrandMaster) ----
 
     _alphaBeta(engine, depth, alpha, beta, maximizing, aiColor, ply, allowNull) {
         this.nodesSearched++;
         if (this._checkAbort()) return this._evaluate(engine.board, aiColor);
 
         const allMoves = engine.getAllLegalMoves();
+        const inCheck = engine.isInCheck(engine.turn);
 
         // Terminal
         if (allMoves.length === 0) {
-            if (engine.isInCheck(engine.turn)) return maximizing ? (-100000 + ply) : (100000 - ply);
+            if (inCheck) return maximizing ? (-100000 + ply) : (100000 - ply);
             return 0;
         }
 
@@ -585,17 +601,26 @@ class ChessAI {
             }
         }
 
-        // Null-move pruning (Expert only, not in check, not endgame, maximizing side)
+        // Null-move pruning (Expert+, not in check, not endgame, maximizing side)
         if (this.difficulty >= AI_DIFFICULTY.EXPERT &&
-            allowNull && depth >= 3 && maximizing &&
-            !engine.isInCheck(engine.turn) &&
+            allowNull && depth >= 3 && maximizing && !inCheck &&
             this._totalMaterial(engine.board) > 2600) {
+            const R = this.difficulty >= AI_DIFFICULTY.GRANDMASTER ? 4 : 3; // Stronger reduction for GM
             const nullCopy = this._clone(engine);
             nullCopy.turn = nullCopy.turn === 'white' ? 'black' : 'white';
             nullCopy.enPassantTarget = null;
-            const nullScore = this._alphaBeta(nullCopy, depth - 3, alpha, beta, false, aiColor, ply + 1, false);
+            const nullScore = this._alphaBeta(nullCopy, depth - R, alpha, beta, false, aiColor, ply + 1, false);
             if (this.aborted) return nullScore;
             if (nullScore >= beta) return beta;
+        }
+
+        // Futility pruning (GRANDMASTER only) - skip quiet moves at low depths if position is hopeless
+        const futilityMargin = [0, 200, 350, 500]; // margins for depth 1, 2, 3
+        let staticEval = null;
+        const canFutility = this.difficulty >= AI_DIFFICULTY.GRANDMASTER && 
+                           depth <= 3 && !inCheck && Math.abs(alpha) < 90000;
+        if (canFutility) {
+            staticEval = this._evaluate(engine.board, aiColor);
         }
 
         // Sort moves
@@ -607,19 +632,30 @@ class ChessAI {
 
         for (let i = 0; i < sorted.length; i++) {
             const move = sorted[i];
+            const isCapture = engine.board[move.to.row][move.to.col] || move.isEnPassant;
+            const isPromo = !!move.promotion;
+
+            // Futility pruning: skip quiet moves that can't possibly raise alpha
+            if (canFutility && i > 0 && !isCapture && !isPromo) {
+                const margin = futilityMargin[depth] || 500;
+                if (maximizing && staticEval + margin < alpha) continue;
+                if (!maximizing && staticEval - margin > beta) continue;
+            }
+
             const copy = this._clone(engine);
             const promo = move.promotion ? 'Q' : undefined;
             if (!copy.makeMove(move.from, move.to, promo)) continue;
 
+            const givesCheck = copy.isInCheck(copy.turn);
             let score;
-            const isCapture = engine.board[move.to.row][move.to.col] || move.isEnPassant;
-            const isPromo = !!move.promotion;
 
-            // Late Move Reduction (Expert, quiet late moves)
+            // Late Move Reduction (Expert+, quiet late moves, no check)
             if (this.difficulty >= AI_DIFFICULTY.EXPERT &&
-                i >= 4 && depth >= 3 && !isCapture && !isPromo &&
-                !copy.isInCheck(copy.turn)) {
-                score = this._alphaBeta(copy, depth - 2, alpha, beta, !maximizing, aiColor, ply + 1, true);
+                i >= 4 && depth >= 3 && !isCapture && !isPromo && !givesCheck && !inCheck) {
+                // GM uses more aggressive LMR
+                const R = this.difficulty >= AI_DIFFICULTY.GRANDMASTER ? 
+                          Math.min(2, 1 + Math.floor(i / 8)) : 1;
+                score = this._alphaBeta(copy, depth - 1 - R, alpha, beta, !maximizing, aiColor, ply + 1, true);
                 if (this.aborted) return score;
                 // Re-search if promising
                 if (maximizing ? score > alpha : score < beta) {
@@ -725,11 +761,17 @@ class ChessAI {
 
     _findBestAdvanced(engine, aiColor, allMoves) {
         const maxDepth = this._getMaxDepth();
+        const useAspiration = this.difficulty >= AI_DIFFICULTY.GRANDMASTER;
 
         // Reset heuristics
         this.historyTable = {};
         this.killerMoves = [];
         this.tt.newSearch();
+        
+        // Resize TT for GRANDMASTER (256k entries)
+        if (this.difficulty >= AI_DIFFICULTY.GRANDMASTER) {
+            this.tt.resize(1 << 18); // 256k
+        }
 
         let bestMove = null;
         let bestScore = -Infinity;
@@ -738,27 +780,61 @@ class ChessAI {
         for (let depth = 1; depth <= maxDepth; depth++) {
             let currentBest = null;
             let currentBestScore = -Infinity;
+            
+            // Aspiration windows for GRANDMASTER at depth >= 4
             let alpha = -Infinity;
-            const beta = Infinity;
+            let beta = Infinity;
+            let aspirationDelta = 50;
+            
+            if (useAspiration && depth >= 4 && bestScore > -90000 && bestScore < 90000) {
+                alpha = bestScore - aspirationDelta;
+                beta = bestScore + aspirationDelta;
+            }
 
             const sorted = this._sortMoves(allMoves, engine, 0,
                 bestMove ? { from: bestMove.from, to: bestMove.to } : null
             );
 
-            for (const move of sorted) {
-                const promo = move.promotion ? 'Q' : undefined;
-                const copy = this._clone(engine);
-                if (!copy.makeMove(move.from, move.to, promo)) continue;
+            // Aspiration window loop
+            let aspirationFailed = true;
+            while (aspirationFailed) {
+                aspirationFailed = false;
+                currentBest = null;
+                currentBestScore = -Infinity;
+                let localAlpha = alpha;
 
-                const score = this._alphaBeta(copy, depth - 1, alpha, beta, false, aiColor, 1, true);
+                for (const move of sorted) {
+                    const promo = move.promotion ? 'Q' : undefined;
+                    const copy = this._clone(engine);
+                    if (!copy.makeMove(move.from, move.to, promo)) continue;
 
-                if (this.aborted) break;
+                    const score = this._alphaBeta(copy, depth - 1, localAlpha, beta, false, aiColor, 1, true);
 
-                if (score > currentBestScore) {
-                    currentBestScore = score;
-                    currentBest = { from: move.from, to: move.to, promotion: promo };
+                    if (this.aborted) break;
+
+                    if (score > currentBestScore) {
+                        currentBestScore = score;
+                        currentBest = { from: move.from, to: move.to, promotion: promo };
+                    }
+                    localAlpha = Math.max(localAlpha, score);
                 }
-                alpha = Math.max(alpha, score);
+
+                // Check if aspiration window failed
+                if (useAspiration && depth >= 4 && !this.aborted) {
+                    if (currentBestScore <= alpha) {
+                        // Fail low - widen window
+                        alpha = Math.max(-Infinity, alpha - aspirationDelta * 4);
+                        aspirationDelta *= 4;
+                        aspirationFailed = true;
+                    } else if (currentBestScore >= beta) {
+                        // Fail high - widen window
+                        beta = Math.min(Infinity, beta + aspirationDelta * 4);
+                        aspirationDelta *= 4;
+                        aspirationFailed = true;
+                    }
+                }
+                
+                if (this.aborted) break;
             }
 
             // Only accept completed iterations

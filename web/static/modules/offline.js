@@ -172,9 +172,10 @@ export class OfflineGame {
       1: 200,   // Facile: 0.2s
       2: 300,   // Moyen: 0.3s
       3: 400,   // Difficile: 0.4s
-      4: 500    // Expert: 0.5s
+      4: 500,   // Expert: 0.5s
+      5: 0      // Grand Maître: pas de délai artificiel (calcul long)
     };
-    const base = baseDelay[this.aiDifficulty] || 300;
+    const base = baseDelay[this.aiDifficulty] ?? 300;
     // Add some random variation (±20%) for natural feel
     const variation = base * 0.2;
     return base + (Math.random() * variation * 2 - variation);
