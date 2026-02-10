@@ -177,7 +177,13 @@ export class UIManager {
     this.selfLabel.textContent = `Vous (${colorName})`;
     
     if (gameMode === 'ai') {
-      const diffNames = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile', 4: 'Expert', 5: 'Grand Maître' };
+      const diffNames = {
+        1: 'Facile',
+        2: 'Moyen',
+        3: 'Difficile (Stockfish)',
+        4: 'Expert (Stockfish)',
+        5: 'Grand Maître (Stockfish)'
+      };
       this.opponentLabel.textContent = 'IA ' + (diffNames[aiDifficulty] || '');
     } else {
       this.opponentLabel.textContent = 'Adversaire';
@@ -201,7 +207,7 @@ export class UIManager {
       opponentRow.classList.add('active-turn');
       
       if (gameMode === 'ai' && aiThinking) {
-        this.gameStatus.textContent = "L'IA réfléchit…";
+        this.gameStatus.textContent = "Stockfish réfléchit…";
       } else {
         this.gameStatus.textContent = gameMode === 'ai' ? "Tour de l'IA" : "Tour adverse";
       }

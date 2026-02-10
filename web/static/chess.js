@@ -636,4 +636,54 @@ class ChessEngine {
     getKingPosition(color) {
         return this._findKing(color);
     }
+
+    /**
+     * Convertit la position courante en notation FEN.
+     */
+    toFEN() {
+        const pieceChar = { K: 'K', Q: 'Q', R: 'R', B: 'B', N: 'N', P: 'P' };
+        let fen = '';
+
+        // 1. Pièces
+        for (let r = 0; r < 8; r++) {
+            let empty = 0;
+            for (let c = 0; c < 8; c++) {
+                const p = this.board[r][c];
+                if (!p) {
+                    empty++;
+                } else {
+                    if (empty > 0) { fen += empty; empty = 0; }
+                    const ch = pieceChar[p.type];
+                    fen += p.color === 'white' ? ch : ch.toLowerCase();
+                }
+            }
+            if (empty > 0) fen += empty;
+            if (r < 7) fen += '/';
+        }
+
+        // 2. Trait
+        fen += ' ' + (this.turn === 'white' ? 'w' : 'b');
+
+        // 3. Droits de roque
+        let castling = '';
+        if (this.castlingRights.white.kingSide) castling += 'K';
+        if (this.castlingRights.white.queenSide) castling += 'Q';
+        if (this.castlingRights.black.kingSide) castling += 'k';
+        if (this.castlingRights.black.queenSide) castling += 'q';
+        fen += ' ' + (castling || '-');
+
+        // 4. En passant
+        if (this.enPassantTarget) {
+            const files = 'abcdefgh';
+            const ranks = '87654321';
+            fen += ' ' + files[this.enPassantTarget.col] + ranks[this.enPassantTarget.row];
+        } else {
+            fen += ' -';
+        }
+
+        // 5. Demi-coups / coups complets
+        fen += ' ' + this.halfMoveClock + ' ' + this.fullMoveNumber;
+
+        return fen;
+    }
 }

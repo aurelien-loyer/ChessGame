@@ -165,26 +165,27 @@ export class OfflineGame {
 
   /**
    * Get AI thinking delay based on difficulty (in ms)
-   * Reduced delays since computation is now time-budgeted
+   * For Stockfish levels (3-5), no artificial delay needed since
+   * Stockfish has its own movetime budget.
    */
   getAIDelay() {
     const baseDelay = {
       1: 200,   // Facile: 0.2s
       2: 300,   // Moyen: 0.3s
-      3: 400,   // Difficile: 0.4s
-      4: 500,   // Expert: 0.5s
-      5: 0      // Grand Maître: pas de délai artificiel (calcul long)
+      3: 0,     // Difficile: Stockfish gère le temps
+      4: 0,     // Expert: Stockfish gère le temps
+      5: 0      // Grand Maître: Stockfish gère le temps
     };
-    const base = baseDelay[this.aiDifficulty] ?? 300;
-    // Add some random variation (±20%) for natural feel
+    const base = baseDelay[this.aiDifficulty] ?? 200;
+    if (base === 0) return 0;
     const variation = base * 0.2;
     return base + (Math.random() * variation * 2 - variation);
   }
 
   /**
-   * Make AI move
+   * Make AI move (async — supports Stockfish WASM Worker)
    */
-  makeAIMove() {
+  async makeAIMove() {
     if (this.engine.gameOver || this.engine.turn !== this.aiColor) {
       return;
     }
@@ -192,11 +193,22 @@ export class OfflineGame {
     this.aiThinking = true;
     this.ui.updateStatus(this.engine, 'ai', true);
     
-    // Compute AI move immediately, then delay the execution for UX
-    const bestMove = this.aiPlayer.findBestMove(this.engine, this.aiColor);
-    const delay = this.getAIDelay();
-    
-    setTimeout(() => {
+    try {
+      // findBestMove is now async (returns Promise for Stockfish levels)
+      const bestMove = await this.aiPlayer.findBestMove(this.engine, this.aiColor);
+      
+      // Small delay for easy levels so the move doesn't feel instant
+      const delay = this.getAIDelay();
+      if (delay > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      // Check game hasn't ended while we were thinking
+      if (this.engine.gameOver || this.engine.turn !== this.aiColor) {
+        this.aiThinking = false;
+        return;
+      }
+      
       if (bestMove) {
         this.engine.makeMove(
           bestMove.from, 
@@ -211,10 +223,12 @@ export class OfflineGame {
           this.showGameOver();
         }
       }
-      
-      this.aiThinking = false;
-      this.ui.updateStatus(this.engine, 'ai', false);
-    }, delay);
+    } catch (e) {
+      console.error('[OfflineGame] AI move error:', e);
+    }
+    
+    this.aiThinking = false;
+    this.ui.updateStatus(this.engine, 'ai', false);
   }
 
   /**
@@ -323,6 +337,10 @@ export class OfflineGame {
    */
   cleanup() {
     this.stopTimer();
+    // Stop any ongoing Stockfish search
+    if (stockfishBridge) {
+      stockfishBridge.stop();
+    }
     this.aiPlayer = null;
     this.aiThinking = false;
   }

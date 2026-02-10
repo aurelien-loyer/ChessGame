@@ -407,6 +407,12 @@ body {
   transition: all 0.15s;
 }
 
+.diff-btn small {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
 .diff-btn:hover {
   border-color: var(--t3);
   color: var(--t1);
