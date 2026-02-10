@@ -180,9 +180,9 @@ export class UIManager {
       const diffNames = {
         1: 'Facile',
         2: 'Moyen',
-        3: 'Difficile (Stockfish)',
-        4: 'Expert (Stockfish)',
-        5: 'Grand Maître (Stockfish)'
+        3: 'Difficile',
+        4: 'Expert',
+        5: 'Grand Maître'
       };
       this.opponentLabel.textContent = 'IA ' + (diffNames[aiDifficulty] || '');
     } else {

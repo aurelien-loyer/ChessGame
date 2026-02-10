@@ -10,9 +10,16 @@ import json
 import os
 import random
 import string
+import shutil
 from pathlib import Path
 
 from aiohttp import web
+
+# --- Stockfish Engine (python-chess) ---
+import chess
+import chess.engine
+
+STOCKFISH_PATH = shutil.which("stockfish") or "/usr/games/stockfish"
 
 # --- Configuration ---
 PORT = int(os.environ.get("PORT", 8080))
@@ -297,6 +304,131 @@ async def health_handler(request):
     return web.Response(text="OK")
 
 
+# --- Stockfish AI endpoint ---
+# Engine pool to reuse Stockfish processes
+_engine_lock = asyncio.Lock()
+_engine_instance = None
+
+
+async def _get_engine():
+    """Get or create a persistent Stockfish engine instance."""
+    global _engine_instance
+    if _engine_instance is not None:
+        return _engine_instance
+    try:
+        transport, engine = await chess.engine.popen_uci(STOCKFISH_PATH)
+        # Configure for maximum strength
+        await engine.configure({
+            "Threads": 1,
+            "Hash": 64,
+        })
+        _engine_instance = engine
+        print(f"[STOCKFISH] Engine started: {STOCKFISH_PATH}")
+        return engine
+    except Exception as e:
+        print(f"[STOCKFISH] Failed to start engine: {e}")
+        return None
+
+
+async def ai_move_handler(request):
+    """
+    POST /api/ai-move
+    Body: { "fen": "...", "difficulty": 3|4|5 }
+    Returns: { "move": "e2e4", "eval": 0.5, "depth": 20 }
+
+    Difficulty mapping:
+      3 (Hard)    — Skill 5,  depth 12, time 1s
+      4 (Expert)  — Skill 14, depth 18, time 3s
+      5 (GM)      — Skill 20, depth 25, time 10s, full NNUE strength
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
+    fen = data.get("fen")
+    difficulty = data.get("difficulty", 5)
+
+    if not fen:
+        return web.json_response({"error": "Missing fen"}, status=400)
+
+    try:
+        board = chess.Board(fen)
+    except Exception:
+        return web.json_response({"error": "Invalid FEN"}, status=400)
+
+    if board.is_game_over():
+        return web.json_response({"error": "Game is over"}, status=400)
+
+    # Configure search parameters per difficulty
+    if difficulty <= 3:
+        limit = chess.engine.Limit(depth=12, time=1.0)
+        skill_level = 5
+    elif difficulty == 4:
+        limit = chess.engine.Limit(depth=18, time=3.0)
+        skill_level = 14
+    else:
+        # Grand Maître — full strength, deep search, long time
+        limit = chess.engine.Limit(depth=25, time=10.0)
+        skill_level = 20
+
+    async with _engine_lock:
+        engine = await _get_engine()
+        if engine is None:
+            return web.json_response(
+                {"error": "Stockfish engine not available"},
+                status=503
+            )
+
+        try:
+            # Set skill level
+            await engine.configure({"Skill Level": skill_level})
+
+            # Find the best move
+            result = await engine.play(board, limit)
+            move_uci = result.move.uci() if result.move else None
+
+            if not move_uci:
+                return web.json_response({"error": "No move found"}, status=500)
+
+            # Get evaluation info
+            info = await engine.analyse(board, chess.engine.Limit(depth=min(12, limit.depth or 12), time=0.5))
+            score = info.get("score")
+            eval_cp = None
+            eval_mate = None
+            if score:
+                pov = score.relative
+                if pov.is_mate():
+                    eval_mate = pov.mate()
+                else:
+                    eval_cp = pov.score()
+
+            response = {
+                "move": move_uci,
+                "depth": info.get("depth", 0),
+            }
+            if eval_cp is not None:
+                response["eval"] = eval_cp / 100.0
+            if eval_mate is not None:
+                response["mate"] = eval_mate
+
+            return web.json_response(response)
+
+        except Exception as e:
+            print(f"[STOCKFISH] Error during search: {e}")
+            # Engine might be dead, reset it
+            global _engine_instance
+            try:
+                await engine.quit()
+            except Exception:
+                pass
+            _engine_instance = None
+            return web.json_response(
+                {"error": "Engine error, please retry"},
+                status=500
+            )
+
+
 # --- Index page ---
 async def index_handler(request):
     return web.FileResponse(STATIC_DIR / "index.html")
@@ -306,6 +438,7 @@ async def index_handler(request):
 def create_app():
     app = web.Application()
     app.router.add_get("/health", health_handler)
+    app.router.add_post("/api/ai-move", ai_move_handler)
     app.router.add_get("/ws", websocket_handler)
     app.router.add_get("/", index_handler)
     app.router.add_static("/", STATIC_DIR, show_index=False)

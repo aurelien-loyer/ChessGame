@@ -1,20 +1,15 @@
 /**
- * ai.js — IA d'échecs hybride
+ * ai.js — IA d'echecs hybride (Server Stockfish + WASM fallback)
  *
  * Architecture :
- *   - Niveaux 1-2 (Easy/Medium) : Minimax local (instantané)
- *   - Niveaux 3-5 (Hard/Expert/GM) : Stockfish WASM via Web Worker
+ *   Niveaux 1-2 : Minimax local (instantane)
+ *   Niveaux 3-5 : Stockfish natif cote serveur via /api/ai-move
+ *                 Fallback : Stockfish WASM dans un Web Worker
  *
- * Stockfish est le moteur d'échecs le plus fort au monde (~3500+ ELO).
- * Il tourne intégralement dans le navigateur via WebAssembly.
- *
- * Mapping des niveaux vers Stockfish :
- *   HARD   (3) — Skill 5,  ELO 1600, depth 12, 1s
- *   EXPERT (4) — Skill 14, ELO 2200, depth 18, 3s
- *   GM     (5) — Skill 20, pleine force, depth 24, 10s
+ * Le serveur execute Stockfish en natif (pas WASM) = pleine puissance.
  */
 
-const AI_DIFFICULTY = {
+var AI_DIFFICULTY = {
     EASY: 1,
     MEDIUM: 2,
     HARD: 3,
@@ -22,333 +17,294 @@ const AI_DIFFICULTY = {
     GRANDMASTER: 5
 };
 
-// ---- PST (pour minimax local niveaux 1-2) ----
-
-const PAWN_TABLE = [
-    [  0,  0,  0,  0,  0,  0,  0,  0 ],
-    [ 50, 50, 50, 50, 50, 50, 50, 50 ],
-    [ 10, 10, 20, 30, 30, 20, 10, 10 ],
-    [  5,  5, 10, 25, 25, 10,  5,  5 ],
-    [  0,  0,  0, 20, 20,  0,  0,  0 ],
-    [  5, -5,-10,  0,  0,-10, -5,  5 ],
-    [  5, 10, 10,-20,-20, 10, 10,  5 ],
-    [  0,  0,  0,  0,  0,  0,  0,  0 ]
+// ---- PST tables (minimax local niveaux 1-2) ----
+var PAWN_TABLE = [
+    [0,0,0,0,0,0,0,0],[50,50,50,50,50,50,50,50],[10,10,20,30,30,20,10,10],
+    [5,5,10,25,25,10,5,5],[0,0,0,20,20,0,0,0],[5,-5,-10,0,0,-10,-5,5],
+    [5,10,10,-20,-20,10,10,5],[0,0,0,0,0,0,0,0]
 ];
-
-const KNIGHT_TABLE = [
-    [-50,-40,-30,-30,-30,-30,-40,-50 ],
-    [-40,-20,  0,  0,  0,  0,-20,-40 ],
-    [-30,  0, 10, 15, 15, 10,  0,-30 ],
-    [-30,  5, 15, 20, 20, 15,  5,-30 ],
-    [-30,  0, 15, 20, 20, 15,  0,-30 ],
-    [-30,  5, 10, 15, 15, 10,  5,-30 ],
-    [-40,-20,  0,  5,  5,  0,-20,-40 ],
-    [-50,-40,-30,-30,-30,-30,-40,-50 ]
+var KNIGHT_TABLE = [
+    [-50,-40,-30,-30,-30,-30,-40,-50],[-40,-20,0,0,0,0,-20,-40],
+    [-30,0,10,15,15,10,0,-30],[-30,5,15,20,20,15,5,-30],
+    [-30,0,15,20,20,15,0,-30],[-30,5,10,15,15,10,5,-30],
+    [-40,-20,0,5,5,0,-20,-40],[-50,-40,-30,-30,-30,-30,-40,-50]
 ];
-
-const BISHOP_TABLE = [
-    [-20,-10,-10,-10,-10,-10,-10,-20 ],
-    [-10,  0,  0,  0,  0,  0,  0,-10 ],
-    [-10,  0,  5, 10, 10,  5,  0,-10 ],
-    [-10,  5,  5, 10, 10,  5,  5,-10 ],
-    [-10,  0, 10, 10, 10, 10,  0,-10 ],
-    [-10, 10, 10, 10, 10, 10, 10,-10 ],
-    [-10,  5,  0,  0,  0,  0,  5,-10 ],
-    [-20,-10,-10,-10,-10,-10,-10,-20 ]
+var BISHOP_TABLE = [
+    [-20,-10,-10,-10,-10,-10,-10,-20],[-10,0,0,0,0,0,0,-10],
+    [-10,0,5,10,10,5,0,-10],[-10,5,5,10,10,5,5,-10],
+    [-10,0,10,10,10,10,0,-10],[-10,10,10,10,10,10,10,-10],
+    [-10,5,0,0,0,0,5,-10],[-20,-10,-10,-10,-10,-10,-10,-20]
 ];
-
-const ROOK_TABLE = [
-    [  0,  0,  0,  0,  0,  0,  0,  0 ],
-    [  5, 10, 10, 10, 10, 10, 10,  5 ],
-    [ -5,  0,  0,  0,  0,  0,  0, -5 ],
-    [ -5,  0,  0,  0,  0,  0,  0, -5 ],
-    [ -5,  0,  0,  0,  0,  0,  0, -5 ],
-    [ -5,  0,  0,  0,  0,  0,  0, -5 ],
-    [ -5,  0,  0,  0,  0,  0,  0, -5 ],
-    [  0,  0,  0,  5,  5,  0,  0,  0 ]
+var ROOK_TABLE = [
+    [0,0,0,0,0,0,0,0],[5,10,10,10,10,10,10,5],[-5,0,0,0,0,0,0,-5],
+    [-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],
+    [-5,0,0,0,0,0,0,-5],[0,0,0,5,5,0,0,0]
 ];
-
-const QUEEN_TABLE = [
-    [-20,-10,-10, -5, -5,-10,-10,-20 ],
-    [-10,  0,  0,  0,  0,  0,  0,-10 ],
-    [-10,  0,  5,  5,  5,  5,  0,-10 ],
-    [ -5,  0,  5,  5,  5,  5,  0, -5 ],
-    [  0,  0,  5,  5,  5,  5,  0, -5 ],
-    [-10,  5,  5,  5,  5,  5,  0,-10 ],
-    [-10,  0,  5,  0,  0,  0,  0,-10 ],
-    [-20,-10,-10, -5, -5,-10,-10,-20 ]
+var QUEEN_TABLE = [
+    [-20,-10,-10,-5,-5,-10,-10,-20],[-10,0,0,0,0,0,0,-10],
+    [-10,0,5,5,5,5,0,-10],[-5,0,5,5,5,5,0,-5],
+    [0,0,5,5,5,5,0,-5],[-10,5,5,5,5,5,0,-10],
+    [-10,0,5,0,0,0,0,-10],[-20,-10,-10,-5,-5,-10,-10,-20]
 ];
-
-const KING_MG_TABLE = [
-    [-30,-40,-40,-50,-50,-40,-40,-30 ],
-    [-30,-40,-40,-50,-50,-40,-40,-30 ],
-    [-30,-40,-40,-50,-50,-40,-40,-30 ],
-    [-30,-40,-40,-50,-50,-40,-40,-30 ],
-    [-20,-30,-30,-40,-40,-30,-30,-20 ],
-    [-10,-20,-20,-20,-20,-20,-20,-10 ],
-    [ 20, 20,  0,  0,  0,  0, 20, 20 ],
-    [ 20, 30, 10,  0,  0, 10, 30, 20 ]
+var KING_MG_TABLE = [
+    [-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],
+    [-20,-30,-30,-40,-40,-30,-30,-20],[-10,-20,-20,-20,-20,-20,-20,-10],
+    [20,20,0,0,0,0,20,20],[20,30,10,0,0,10,30,20]
 ];
+var PST = {P:PAWN_TABLE,N:KNIGHT_TABLE,B:BISHOP_TABLE,R:ROOK_TABLE,Q:QUEEN_TABLE,K:KING_MG_TABLE};
+var PIECE_VALUES = {P:100,N:320,B:330,R:500,Q:900,K:20000};
 
-const PST = { P: PAWN_TABLE, N: KNIGHT_TABLE, B: BISHOP_TABLE, R: ROOK_TABLE, Q: QUEEN_TABLE, K: KING_MG_TABLE };
-const PIECE_VALUES = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
 
 // ==========================================================================
-// StockfishBridge — manages the Stockfish WASM Web Worker
+// StockfishBridge — Stockfish WASM Web Worker (fallback si serveur KO)
 // ==========================================================================
-class StockfishBridge {
-    constructor() {
+var StockfishBridge = (function() {
+    function SB() {
         this.worker = null;
         this.ready = false;
         this.readyPromise = null;
         this._readyResolve = null;
-        this._readyReject = null;
         this._searchResolve = null;
     }
 
-    init() {
+    SB.prototype.init = function() {
         if (this.readyPromise) return this.readyPromise;
-
-        this.readyPromise = new Promise((resolve, reject) => {
-            this._readyResolve = resolve;
-            this._readyReject = reject;
-
+        var self = this;
+        this.readyPromise = new Promise(function(resolve, reject) {
+            self._readyResolve = resolve;
             try {
-                this.worker = new Worker('stockfish-worker.js');
-            } catch (e) {
-                console.warn('[StockfishBridge] Worker file failed, trying inline...');
-                this._createInlineWorker();
+                self.worker = new Worker('stockfish-worker.js');
+            } catch(e) {
+                self._createInlineWorker();
             }
-
-            if (!this.worker) {
-                reject(new Error('Cannot create Stockfish worker'));
-                return;
-            }
-
-            this.worker.onmessage = (e) => this._onMessage(e.data);
-            this.worker.onerror = (e) => {
-                console.error('[StockfishBridge] Worker error:', e);
-                reject(e);
-            };
-
-            setTimeout(() => {
-                if (!this.ready) {
-                    console.warn('[StockfishBridge] Timeout loading Stockfish');
-                    reject(new Error('Stockfish load timeout'));
-                }
+            if (!self.worker) { reject(new Error('No worker')); return; }
+            self.worker.onmessage = function(e) { self._onMessage(e.data); };
+            self.worker.onerror = function(e) { reject(e); };
+            setTimeout(function() {
+                if (!self.ready) reject(new Error('Stockfish WASM timeout'));
             }, 15000);
-
-            this.worker.postMessage({ type: 'init' });
+            self.worker.postMessage({type:'init'});
         });
-
         return this.readyPromise;
-    }
+    };
 
-    _createInlineWorker() {
-        var lines = [];
-        lines.push("var sf = null;");
-        lines.push("function send(cmd) { if (sf && sf.postMessage) sf.postMessage(cmd); }");
-        lines.push("function onMsg(line) {");
-        lines.push("  if (typeof line !== 'string') return;");
-        lines.push("  if (line === 'uciok') { send('setoption name Threads value 1'); send('setoption name Hash value 32'); send('isready'); }");
-        lines.push("  if (line === 'readyok') postMessage({ type: 'ready' });");
-        lines.push("  if (line.startsWith('bestmove ')) postMessage({ type: 'bestmove', move: line.split(' ')[1], info: {} });");
-        lines.push("}");
-        lines.push("self.onmessage = function(e) {");
-        lines.push("  var msg = e.data;");
-        lines.push("  if (msg.type === 'init') {");
-        lines.push("    importScripts('https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js');");
-        lines.push("    sf = typeof STOCKFISH === 'function' ? STOCKFISH() : null;");
-        lines.push("    if (sf) { if (sf.addMessageListener) sf.addMessageListener(onMsg); else sf.print = onMsg; }");
-        lines.push("    send('uci');");
-        lines.push("  } else if (msg.type === 'search') {");
-        lines.push("    if (msg.options.skillLevel !== undefined) send('setoption name Skill Level value ' + msg.options.skillLevel);");
-        lines.push("    send('position fen ' + msg.fen);");
-        lines.push("    var go = 'go';");
-        lines.push("    if (msg.options.depth) go += ' depth ' + msg.options.depth;");
-        lines.push("    if (msg.options.movetime) go += ' movetime ' + msg.options.movetime;");
-        lines.push("    send(go);");
-        lines.push("  } else if (msg.type === 'stop') { send('stop'); }");
-        lines.push("  else if (msg.type === 'quit') { if (sf && sf.terminate) sf.terminate(); }");
-        lines.push("};");
-        var code = lines.join("\n");
-        var blob = new Blob([code], { type: 'application/javascript' });
+    SB.prototype._createInlineWorker = function() {
+        var c = [];
+        c.push("var sf=null;");
+        c.push("function send(cmd){if(sf&&sf.postMessage)sf.postMessage(cmd);}");
+        c.push("function onMsg(l){if(typeof l!=='string')return;");
+        c.push("if(l==='uciok'){send('setoption name Threads value 1');send('setoption name Hash value 32');send('isready');}");
+        c.push("if(l==='readyok')postMessage({type:'ready'});");
+        c.push("if(l.startsWith('bestmove '))postMessage({type:'bestmove',move:l.split(' ')[1],info:{}});}");
+        c.push("self.onmessage=function(e){var m=e.data;");
+        c.push("if(m.type==='init'){importScripts('https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js');");
+        c.push("sf=typeof STOCKFISH==='function'?STOCKFISH():null;");
+        c.push("if(sf){if(sf.addMessageListener)sf.addMessageListener(onMsg);else sf.print=onMsg;}send('uci');}");
+        c.push("else if(m.type==='search'){");
+        c.push("if(m.options.skillLevel!==undefined)send('setoption name Skill Level value '+m.options.skillLevel);");
+        c.push("send('position fen '+m.fen);var go='go';");
+        c.push("if(m.options.depth)go+=' depth '+m.options.depth;");
+        c.push("if(m.options.movetime)go+=' movetime '+m.options.movetime;send(go);}");
+        c.push("else if(m.type==='stop')send('stop');");
+        c.push("else if(m.type==='quit'){if(sf&&sf.terminate)sf.terminate();}};");
+        var blob = new Blob([c.join("\n")], {type:'application/javascript'});
         this.worker = new Worker(URL.createObjectURL(blob));
-    }
+    };
 
-    _onMessage(msg) {
+    SB.prototype._onMessage = function(msg) {
         if (msg.type === 'ready') {
             this.ready = true;
-            console.log('[StockfishBridge] Stockfish WASM ready');
-            if (this._readyResolve) {
-                this._readyResolve();
-                this._readyResolve = null;
-            }
+            if (this._readyResolve) { this._readyResolve(); this._readyResolve = null; }
         }
-        if (msg.type === 'bestmove') {
-            if (this._searchResolve) {
-                this._searchResolve(msg);
-                this._searchResolve = null;
-            }
+        if (msg.type === 'bestmove' && this._searchResolve) {
+            this._searchResolve(msg);
+            this._searchResolve = null;
         }
-        if (msg.type === 'error') {
-            console.error('[StockfishBridge]', msg.message);
-        }
-    }
+    };
 
-    async search(fen, options) {
-        if (!this.ready) await this.init();
-        return new Promise((resolve) => {
-            this._searchResolve = resolve;
-            this.worker.postMessage({ type: 'search', fen: fen, options: options || {} });
+    SB.prototype.search = function(fen, options) {
+        var self = this;
+        var p = this.ready ? Promise.resolve() : this.init();
+        return p.then(function() {
+            return new Promise(function(resolve) {
+                self._searchResolve = resolve;
+                self.worker.postMessage({type:'search', fen:fen, options:options||{}});
+            });
         });
-    }
+    };
 
-    stop() {
-        if (this.worker) this.worker.postMessage({ type: 'stop' });
-    }
+    SB.prototype.stop = function() {
+        if (this.worker) this.worker.postMessage({type:'stop'});
+    };
 
-    destroy() {
-        if (this.worker) {
-            this.worker.postMessage({ type: 'quit' });
-            this.worker.terminate();
-            this.worker = null;
-        }
-        this.ready = false;
-        this.readyPromise = null;
-    }
-}
+    SB.prototype.destroy = function() {
+        if (this.worker) { this.worker.postMessage({type:'quit'}); this.worker.terminate(); this.worker = null; }
+        this.ready = false; this.readyPromise = null;
+    };
 
-// Singleton global
+    return SB;
+})();
+
 var stockfishBridge = new StockfishBridge();
 
+
 // ==========================================================================
-// ChessAI — Unified interface (local minimax + Stockfish)
+// ChessAI — Interface unifiee
+//   Niveaux 1-2 : minimax local
+//   Niveaux 3-5 : API serveur /api/ai-move (Stockfish natif)
+//                 Fallback : WASM si serveur indisponible
 // ==========================================================================
-class ChessAI {
-    constructor(difficulty) {
+
+var ChessAI = (function() {
+
+    function AI(difficulty) {
         this.difficulty = difficulty || AI_DIFFICULTY.MEDIUM;
         this.nodesSearched = 0;
         this.timeStart = 0;
         this.timeBudget = 0;
         this.aborted = false;
-        this.stockfishLoading = false;
-        this.stockfishFailed = false;
-
-        if (this.difficulty >= AI_DIFFICULTY.HARD) {
-            this._preloadStockfish();
-        }
+        this.serverAvailable = true;  // On suppose le serveur dispo
+        this.serverChecked = false;
     }
 
-    setDifficulty(level) {
+    AI.prototype.setDifficulty = function(level) {
         this.difficulty = level;
-        if (level >= AI_DIFFICULTY.HARD) {
-            this._preloadStockfish();
-        }
-    }
+    };
 
-    async _preloadStockfish() {
-        if (stockfishBridge.ready || this.stockfishLoading) return;
-        this.stockfishLoading = true;
-        try {
-            await stockfishBridge.init();
-            this.stockfishFailed = false;
-            console.log('[ChessAI] Stockfish loaded successfully');
-        } catch (e) {
-            console.warn('[ChessAI] Stockfish unavailable, fallback to minimax:', e.message);
-            this.stockfishFailed = true;
-        }
-        this.stockfishLoading = false;
-    }
+    // ----- Server API -----
 
-    _usesStockfish() {
-        return this.difficulty >= AI_DIFFICULTY.HARD && !this.stockfishFailed;
-    }
+    AI.prototype._callServer = function(fen, difficulty) {
+        return fetch('/api/ai-move', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({fen: fen, difficulty: difficulty})
+        }).then(function(res) {
+            if (!res.ok) throw new Error('Server error ' + res.status);
+            return res.json();
+        });
+    };
 
-    _getStockfishOptions() {
-        switch (this.difficulty) {
-            case AI_DIFFICULTY.HARD:
-                // ~1600 ELO — Skill Level 5, limited depth and time
-                return { skillLevel: 5, depth: 10, movetime: 1000 };
-            case AI_DIFFICULTY.EXPERT:
-                // ~2200 ELO — Skill Level 14, deeper search
-                return { skillLevel: 14, depth: 15, movetime: 3000 };
-            case AI_DIFFICULTY.GRANDMASTER:
-                // Full strength Stockfish — Skill Level 20, max depth
-                return { skillLevel: 20, depth: 22, movetime: 10000 };
-            default:
-                return { skillLevel: 10, depth: 12, movetime: 2000 };
-        }
-    }
+    // ----- UCI move parsing -----
 
-    _uciToMove(uciMove) {
+    AI.prototype._uciToMove = function(uciMove) {
         if (!uciMove || uciMove.length < 4) return null;
         var files = 'abcdefgh';
-        var fromCol = files.indexOf(uciMove[0]);
-        var fromRow = 8 - parseInt(uciMove[1]);
-        var toCol = files.indexOf(uciMove[2]);
-        var toRow = 8 - parseInt(uciMove[3]);
-        var promotion = uciMove.length > 4 ? uciMove[4].toUpperCase() : undefined;
         return {
-            from: { row: fromRow, col: fromCol },
-            to: { row: toRow, col: toCol },
-            promotion: promotion
+            from: { row: 8 - parseInt(uciMove[1]), col: files.indexOf(uciMove[0]) },
+            to:   { row: 8 - parseInt(uciMove[3]), col: files.indexOf(uciMove[2]) },
+            promotion: uciMove.length > 4 ? uciMove[4].toUpperCase() : undefined
         };
-    }
+    };
 
-    async findBestMove(engine, aiColor) {
+    // ----- Main entry point -----
+
+    AI.prototype.findBestMove = function(engine, aiColor) {
         var allMoves = engine.getAllLegalMoves();
-        if (allMoves.length === 0) return null;
+        if (allMoves.length === 0) return Promise.resolve(null);
         if (allMoves.length === 1) {
             var m = allMoves[0];
-            return { from: m.from, to: m.to, promotion: m.promotion ? 'Q' : undefined };
+            return Promise.resolve({from:m.from, to:m.to, promotion:m.promotion?'Q':undefined});
         }
 
-        if (this._usesStockfish()) {
+        // Niveaux 3-5 : Stockfish (serveur ou WASM)
+        if (this.difficulty >= AI_DIFFICULTY.HARD) {
             return this._findWithStockfish(engine, allMoves);
         }
 
-        return this._findWithMinimax(engine, aiColor, allMoves);
-    }
+        // Niveaux 1-2 : minimax local
+        return Promise.resolve(this._findWithMinimax(engine, aiColor, allMoves));
+    };
 
-    async _findWithStockfish(engine, allMoves) {
-        try {
-            var fen = engine.toFEN();
-            var options = this._getStockfishOptions();
-            console.log('[ChessAI] Stockfish search: skill=' + options.skillLevel +
-                ', depth=' + options.depth +
-                ', movetime=' + options.movetime);
+    // ----- Stockfish (server-first, WASM fallback) -----
 
-            var result = await stockfishBridge.search(fen, options);
+    AI.prototype._findWithStockfish = function(engine, allMoves) {
+        var self = this;
+        var fen = engine.toFEN();
 
-            if (result && result.move) {
-                var parsed = this._uciToMove(result.move);
-                if (parsed) {
-                    var legal = allMoves.find(function(m) {
-                        return m.from.row === parsed.from.row &&
-                               m.from.col === parsed.from.col &&
-                               m.to.row === parsed.to.row &&
-                               m.to.col === parsed.to.col;
-                    });
-                    if (legal) {
-                        console.log('[ChessAI] Stockfish bestmove: ' + result.move);
-                        return parsed;
+        // Try server first
+        if (this.serverAvailable) {
+            return this._callServer(fen, this.difficulty)
+                .then(function(data) {
+                    self.serverAvailable = true;
+                    if (data && data.move) {
+                        var parsed = self._uciToMove(data.move);
+                        if (parsed) {
+                            var legal = allMoves.find(function(m) {
+                                return m.from.row === parsed.from.row && m.from.col === parsed.from.col &&
+                                       m.to.row === parsed.to.row && m.to.col === parsed.to.col;
+                            });
+                            if (legal) {
+                                console.log('[AI] Server Stockfish: ' + data.move +
+                                    (data.depth ? ' (depth ' + data.depth + ')' : '') +
+                                    (data.eval !== undefined ? ' eval=' + data.eval : '') +
+                                    (data.mate !== undefined ? ' mate=' + data.mate : ''));
+                                return parsed;
+                            }
+                        }
                     }
-                }
-            }
-        } catch (e) {
-            console.warn('[ChessAI] Stockfish search failed:', e);
+                    // Move not legal or no move, try WASM
+                    return self._findWithWASM(fen, allMoves);
+                })
+                .catch(function(err) {
+                    console.warn('[AI] Server unavailable, switching to WASM:', err.message);
+                    self.serverAvailable = false;
+                    return self._findWithWASM(fen, allMoves);
+                });
         }
 
-        var m = allMoves[Math.floor(Math.random() * allMoves.length)];
-        return { from: m.from, to: m.to, promotion: m.promotion ? 'Q' : undefined };
-    }
+        // Server known unavailable, go straight to WASM
+        return this._findWithWASM(fen, allMoves);
+    };
+
+    // ----- WASM Fallback -----
+
+    AI.prototype._getWasmOptions = function() {
+        switch (this.difficulty) {
+            case AI_DIFFICULTY.HARD:
+                return { skillLevel: 10, depth: 12, movetime: 2000 };
+            case AI_DIFFICULTY.EXPERT:
+                return { skillLevel: 18, depth: 16, movetime: 5000 };
+            case AI_DIFFICULTY.GRANDMASTER:
+                return { skillLevel: 20, depth: 20, movetime: 10000 };
+            default:
+                return { skillLevel: 10, depth: 12, movetime: 2000 };
+        }
+    };
+
+    AI.prototype._findWithWASM = function(fen, allMoves) {
+        var self = this;
+        var options = this._getWasmOptions();
+        return stockfishBridge.search(fen, options)
+            .then(function(result) {
+                if (result && result.move) {
+                    var parsed = self._uciToMove(result.move);
+                    if (parsed) {
+                        var legal = allMoves.find(function(m) {
+                            return m.from.row === parsed.from.row && m.from.col === parsed.from.col &&
+                                   m.to.row === parsed.to.row && m.to.col === parsed.to.col;
+                        });
+                        if (legal) {
+                            console.log('[AI] WASM Stockfish: ' + result.move);
+                            return parsed;
+                        }
+                    }
+                }
+                // Last resort: random legal move
+                var m = allMoves[Math.floor(Math.random() * allMoves.length)];
+                return {from:m.from, to:m.to, promotion:m.promotion?'Q':undefined};
+            })
+            .catch(function() {
+                var m = allMoves[Math.floor(Math.random() * allMoves.length)];
+                return {from:m.from, to:m.to, promotion:m.promotion?'Q':undefined};
+            });
+    };
 
     // ======================================================================
-    // MINIMAX LOCAL (levels 1-2 or fallback)
+    // MINIMAX LOCAL (niveaux 1-2)
     // ======================================================================
 
-    _findWithMinimax(engine, aiColor, allMoves) {
+    AI.prototype._findWithMinimax = function(engine, aiColor, allMoves) {
         this.nodesSearched = 0;
         this.timeStart = Date.now();
         this.timeBudget = this.difficulty === 1 ? 500 : 1000;
@@ -358,55 +314,47 @@ class ChessAI {
         var bestScore = -Infinity;
         var bestMoves = [];
         var alpha = -Infinity;
-        var beta = Infinity;
 
         for (var i = 0; i < allMoves.length; i++) {
             var move = allMoves[i];
             var promo = move.promotion ? 'Q' : undefined;
             var copy = this._clone(engine);
             if (!copy.makeMove(move.from, move.to, promo)) continue;
-
-            var score;
-            if (depth <= 1) {
-                score = this._evaluateSimple(copy.board, aiColor);
-            } else {
-                score = this._minimax(copy, depth - 1, alpha, beta, false, aiColor);
-            }
+            var score = depth <= 1
+                ? this._eval(copy.board, aiColor)
+                : this._minimax(copy, depth - 1, alpha, Infinity, false, aiColor);
             if (this.aborted) break;
-
             if (score > bestScore) {
                 bestScore = score;
-                bestMoves = [{ from: move.from, to: move.to, promotion: promo }];
+                bestMoves = [{from:move.from, to:move.to, promotion:promo}];
             } else if (score === bestScore) {
-                bestMoves.push({ from: move.from, to: move.to, promotion: promo });
+                bestMoves.push({from:move.from, to:move.to, promotion:promo});
             }
             alpha = Math.max(alpha, score);
         }
 
         if (bestMoves.length === 0) {
             var m = allMoves[0];
-            return { from: m.from, to: m.to, promotion: m.promotion ? 'Q' : undefined };
+            return {from:m.from, to:m.to, promotion:m.promotion?'Q':undefined};
         }
         return bestMoves[Math.floor(Math.random() * bestMoves.length)];
-    }
+    };
 
-    _minimax(engine, depth, alpha, beta, maximizing, aiColor) {
+    AI.prototype._minimax = function(engine, depth, alpha, beta, maximizing, aiColor) {
         this.nodesSearched++;
         if ((this.nodesSearched & 1023) === 0 && Date.now() - this.timeStart > this.timeBudget) {
             this.aborted = true;
-            return this._evaluateSimple(engine.board, aiColor);
+            return this._eval(engine.board, aiColor);
         }
-
-        var allMoves = engine.getAllLegalMoves();
-        if (allMoves.length === 0) {
-            if (engine.isInCheck(engine.turn)) {
-                return maximizing ? -100000 + depth : 100000 - depth;
-            }
-            return 0;
+        var moves = engine.getAllLegalMoves();
+        if (moves.length === 0) {
+            return engine.isInCheck(engine.turn)
+                ? (maximizing ? -100000 + depth : 100000 - depth) : 0;
         }
-        if (depth === 0) return this._evaluateSimple(engine.board, aiColor);
+        if (depth === 0) return this._eval(engine.board, aiColor);
 
-        allMoves.sort(function(a, b) {
+        // MVV-LVA ordering
+        moves.sort(function(a, b) {
             var sa = 0, sb = 0;
             var ta = engine.board[a.to.row][a.to.col];
             var tb = engine.board[b.to.row][b.to.col];
@@ -420,72 +368,60 @@ class ChessAI {
         var best, i, move, copy, val;
         if (maximizing) {
             best = -Infinity;
-            for (i = 0; i < allMoves.length; i++) {
-                move = allMoves[i];
-                copy = this._clone(engine);
+            for (i = 0; i < moves.length; i++) {
+                move = moves[i]; copy = this._clone(engine);
                 copy.makeMove(move.from, move.to, move.promotion || undefined);
-                val = this._minimax(copy, depth - 1, alpha, beta, false, aiColor);
+                val = this._minimax(copy, depth-1, alpha, beta, false, aiColor);
                 if (this.aborted) return val;
-                best = Math.max(best, val);
-                alpha = Math.max(alpha, val);
+                if (val > best) best = val;
+                if (val > alpha) alpha = val;
                 if (beta <= alpha) break;
             }
-            return best;
         } else {
             best = Infinity;
-            for (i = 0; i < allMoves.length; i++) {
-                move = allMoves[i];
-                copy = this._clone(engine);
+            for (i = 0; i < moves.length; i++) {
+                move = moves[i]; copy = this._clone(engine);
                 copy.makeMove(move.from, move.to, move.promotion || undefined);
-                val = this._minimax(copy, depth - 1, alpha, beta, true, aiColor);
+                val = this._minimax(copy, depth-1, alpha, beta, true, aiColor);
                 if (this.aborted) return val;
-                best = Math.min(best, val);
-                beta = Math.min(beta, val);
+                if (val < best) best = val;
+                if (val < beta) beta = val;
                 if (beta <= alpha) break;
             }
-            return best;
         }
-    }
+        return best;
+    };
 
-    _clone(engine) {
+    AI.prototype._clone = function(engine) {
         var c = Object.create(ChessEngine.prototype);
-        c.board = engine.board.map(function(row) {
-            return row.map(function(cell) {
-                return cell ? { type: cell.type, color: cell.color } : null;
-            });
-        });
+        c.board = engine.board.map(function(r){return r.map(function(p){return p?{type:p.type,color:p.color}:null;});});
         c.turn = engine.turn;
         c.castlingRights = {
-            white: { kingSide: engine.castlingRights.white.kingSide, queenSide: engine.castlingRights.white.queenSide },
-            black: { kingSide: engine.castlingRights.black.kingSide, queenSide: engine.castlingRights.black.queenSide }
+            white:{kingSide:engine.castlingRights.white.kingSide,queenSide:engine.castlingRights.white.queenSide},
+            black:{kingSide:engine.castlingRights.black.kingSide,queenSide:engine.castlingRights.black.queenSide}
         };
-        c.enPassantTarget = engine.enPassantTarget ? { row: engine.enPassantTarget.row, col: engine.enPassantTarget.col } : null;
+        c.enPassantTarget = engine.enPassantTarget ? {row:engine.enPassantTarget.row,col:engine.enPassantTarget.col} : null;
         c.halfMoveClock = engine.halfMoveClock;
         c.fullMoveNumber = engine.fullMoveNumber;
         c.moveHistory = [];
-        c.lastMove = engine.lastMove ? { from: engine.lastMove.from, to: engine.lastMove.to } : null;
-        c.gameOver = false;
-        c.result = null;
-        c.winner = null;
+        c.lastMove = engine.lastMove ? {from:engine.lastMove.from,to:engine.lastMove.to} : null;
+        c.gameOver = false; c.result = null; c.winner = null;
         return c;
-    }
+    };
 
-    _posBonus(row, col, type, color) {
-        var table = PST[type];
-        if (!table) return 0;
-        return table[color === 'white' ? row : 7 - row][col];
-    }
-
-    _evaluateSimple(board, aiColor) {
+    AI.prototype._eval = function(board, aiColor) {
         var s = 0;
-        for (var r = 0; r < 8; r++) {
+        for (var r = 0; r < 8; r++)
             for (var c = 0; c < 8; c++) {
                 var p = board[r][c];
                 if (!p) continue;
-                var v = (PIECE_VALUES[p.type] || 0) + this._posBonus(r, c, p.type, p.color);
+                var t = PST[p.type];
+                var bonus = t ? t[p.color === 'white' ? r : 7 - r][c] : 0;
+                var v = (PIECE_VALUES[p.type] || 0) + bonus;
                 s += p.color === aiColor ? v : -v;
             }
-        }
         return s;
-    }
-}
+    };
+
+    return AI;
+})();

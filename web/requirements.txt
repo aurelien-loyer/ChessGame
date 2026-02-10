@@ -1,1 +1,2 @@
 aiohttp>=3.9
+chess>=1.10
