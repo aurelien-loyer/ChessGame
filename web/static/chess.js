@@ -4,12 +4,12 @@
  */
 
 const PIECE_SYMBOLS = {
-    'K': { white: '♚', black: '♚' },
-    'Q': { white: '♛', black: '♛' },
-    'R': { white: '♜', black: '♜' },
-    'B': { white: '♝', black: '♝' },
-    'N': { white: '♞', black: '♞' },
-    'P': { white: '♟', black: '♟' },
+    'K': { white: '♔', black: '♚' },
+    'Q': { white: '♕', black: '♛' },
+    'R': { white: '♖', black: '♜' },
+    'B': { white: '♗', black: '♝' },
+    'N': { white: '♘', black: '♞' },
+    'P': { white: '♙', black: '♟' },
 };
 
 const PIECE_NAMES = { 'K': 'Roi', 'Q': 'Dame', 'R': 'Tour', 'B': 'Fou', 'N': 'Cavalier', 'P': 'Pion' };

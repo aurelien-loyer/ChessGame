@@ -164,6 +164,22 @@ export class OfflineGame {
   }
 
   /**
+   * Get AI thinking delay based on difficulty (in ms)
+   */
+  getAIDelay() {
+    const baseDelay = {
+      1: 800,   // Facile: 0.8s
+      2: 1200,  // Moyen: 1.2s
+      3: 1800,  // Difficile: 1.8s
+      4: 2500   // Expert: 2.5s
+    };
+    const base = baseDelay[this.aiDifficulty] || 1200;
+    // Add some random variation (±25%) for natural feel
+    const variation = base * 0.25;
+    return base + (Math.random() * variation * 2 - variation);
+  }
+
+  /**
    * Make AI move
    */
   makeAIMove() {
@@ -174,10 +190,11 @@ export class OfflineGame {
     this.aiThinking = true;
     this.ui.updateStatus(this.engine, 'ai', true);
     
-    // Delay for better UX
+    // Compute AI move immediately, then delay the execution for UX
+    const bestMove = this.aiPlayer.findBestMove(this.engine, this.aiColor);
+    const delay = this.getAIDelay();
+    
     setTimeout(() => {
-      const bestMove = this.aiPlayer.findBestMove(this.engine, this.aiColor);
-      
       if (bestMove) {
         this.engine.makeMove(
           bestMove.from, 
@@ -195,7 +212,7 @@ export class OfflineGame {
       
       this.aiThinking = false;
       this.ui.updateStatus(this.engine, 'ai', false);
-    }, 100);
+    }, delay);
   }
 
   /**

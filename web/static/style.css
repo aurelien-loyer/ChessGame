@@ -76,6 +76,7 @@ body {
   align-items: center;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* --- Screen Management --- */
@@ -929,12 +930,18 @@ body {
   color: #fff;
   text-shadow:
     -1px -1px 0 #555, 1px -1px 0 #555,
-    -1px  1px 0 #555, 1px  1px 0 #555;
+    -1px  1px 0 #555, 1px  1px 0 #555,
+     0   -1px 0 #555, 0    1px 0 #555,
+    -1px  0   0 #555, 1px  0   0 #555;
+  -webkit-text-stroke: 1px #555;
+  paint-order: stroke fill;
 }
 
 .piece.black-piece {
   color: #1a1a1a;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.1);
+  -webkit-text-stroke: 0.5px #000;
+  paint-order: stroke fill;
 }
 
 
@@ -1071,54 +1078,230 @@ body {
   :root {
     --board-size: min(92vw, calc(100vh - 200px));
   }
+
+  body {
+    overflow-y: auto;
+    align-items: flex-start;
+  }
+
+  .screen {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .screen.active {
+    align-items: flex-start;
+    padding-top: 20px;
+  }
 }
 
 /* --- Mobile --- */
 @media (max-width: 480px) {
+  /* Allow scrolling on mobile */
+  body {
+    overflow-y: auto;
+    overflow-x: hidden;
+    align-items: flex-start;
+  }
+
+  .screen {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .screen.active {
+    align-items: flex-start;
+    padding-top: 16px;
+    padding-bottom: 24px;
+  }
+
   /* Lobby adjustments */
   .lobby-box {
     padding: 16px 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
   .lobby-card {
-    padding: 24px 18px;
-    gap: 24px;
+    padding: 20px 14px;
+    gap: 20px;
   }
   
   .lobby-header {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
   
   .lobby-header h1 {
-    font-size: 30px;
+    font-size: 28px;
   }
   
   .logo-piece {
-    font-size: 32px;
+    font-size: 30px;
+  }
+
+  .tagline {
+    font-size: 12px;
   }
   
-  /* Grid adjustments */
+  /* Grid adjustments — touch-friendly sizing */
   .time-grid {
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: 6px;
+  }
+
+  .time-btn {
+    padding: 12px 6px;
+    font-size: 12px;
+    min-height: 44px;
   }
   
   .diff-grid {
     grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .diff-btn {
+    padding: 12px 8px;
+    font-size: 12px;
+    min-height: 44px;
   }
   
   .color-grid {
     grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
   }
-  
-  /* Game adjustments */
-  .timer {
+
+  .color-btn {
+    padding: 12px 6px;
+    font-size: 11px;
+    min-height: 44px;
+  }
+
+  /* Mode buttons touch-friendly */
+  .mode-btn {
+    padding: 14px 8px;
+    font-size: 13px;
+    min-height: 48px;
+  }
+
+  /* Play button */
+  .btn-play {
+    padding: 16px 16px;
+    font-size: 14px;
+    min-height: 52px;
+  }
+
+  /* Join row */
+  .join-row input {
+    padding: 12px 12px;
     font-size: 16px;
-    padding: 4px 10px;
-    min-width: 62px;
+    min-height: 48px;
+  }
+
+  .btn-join-go {
+    padding: 12px 18px;
+    font-size: 13px;
+    min-height: 48px;
+  }
+
+  .field-label {
+    font-size: 11px;
+  }
+
+  /* Separator */
+  .sep {
+    margin: 0;
+  }
+
+  /* Game adjustments */
+  #game.active {
+    padding: 8px 4px;
+    gap: 4px;
+  }
+
+  .player-row {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .player-name {
+    font-size: 11px;
+  }
+
+  .captured-row {
+    font-size: 12px;
+  }
+
+  .timer {
+    font-size: 14px;
+    padding: 4px 8px;
+    min-width: 56px;
+  }
+
+  .status-row {
+    margin-top: 2px;
+    gap: 6px;
+  }
+
+  .status-text {
+    font-size: 12px;
+  }
+
+  .btn-sm {
+    padding: 8px 12px;
+    font-size: 11px;
+    min-height: 40px;
   }
   
   .waiting-code {
-    font-size: 36px;
+    font-size: 32px;
     letter-spacing: 8px;
+  }
+
+  /* Board labels smaller */
+  .labels-row {
+    font-size: 9px;
+    padding: 2px 0;
+  }
+
+  .labels-col {
+    width: 14px;
+    font-size: 9px;
+  }
+
+  /* Promotion dialog */
+  .promotion-choice {
+    width: 52px;
+    height: 52px;
+    font-size: 34px;
+  }
+
+  .dialog {
+    padding: 24px 20px;
+  }
+
+  .dialog h2 {
+    font-size: 18px;
+  }
+
+  /* Game over panel */
+  #game-over .dialog {
+    max-width: 260px;
+    margin: 10px;
+    padding: 20px 16px;
+  }
+
+  .go-icon {
+    font-size: 38px;
+  }
+
+  /* Board size for mobile */
+  :root {
+    --board-size: min(94vw, calc(100vh - 220px), calc(100vw - 36px));
+  }
+
+  /* Pieces slightly smaller on mobile */
+  .square {
+    font-size: calc(var(--board-size, 640px) / 10.5);
   }
 }
