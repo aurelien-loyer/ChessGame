@@ -157,8 +157,8 @@ export class OfflineGame {
         this.stopTimer();
         this.showGameOver();
       } else {
-        // AI's turn
-        this.makeAIMove();
+        // AI's turn — use setTimeout(0) to let browser paint player's move first
+        setTimeout(() => this.makeAIMove(), 0);
       }
     }
   }
