@@ -165,17 +165,18 @@ export class OfflineGame {
 
   /**
    * Get AI thinking delay based on difficulty (in ms)
+   * Reduced delays since computation is now time-budgeted
    */
   getAIDelay() {
     const baseDelay = {
-      1: 800,   // Facile: 0.8s
-      2: 1200,  // Moyen: 1.2s
-      3: 1800,  // Difficile: 1.8s
-      4: 2500   // Expert: 2.5s
+      1: 200,   // Facile: 0.2s
+      2: 300,   // Moyen: 0.3s
+      3: 400,   // Difficile: 0.4s
+      4: 500    // Expert: 0.5s
     };
-    const base = baseDelay[this.aiDifficulty] || 1200;
-    // Add some random variation (±25%) for natural feel
-    const variation = base * 0.25;
+    const base = baseDelay[this.aiDifficulty] || 300;
+    // Add some random variation (±20%) for natural feel
+    const variation = base * 0.2;
     return base + (Math.random() * variation * 2 - variation);
   }
 

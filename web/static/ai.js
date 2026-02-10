@@ -6,8 +6,15 @@
  * Niveaux :
  *   EASY   (1) — profondeur 1, évaluation basique
  *   MEDIUM (2) — profondeur 2, évaluation basique
- *   HARD   (3) — profondeur 4 + quiescence, évaluation avancée, mobilité, structure de pions
- *   EXPERT (4) — profondeur 5 + iterative deepening, null-move pruning, transposition table
+ *   HARD   (3) — profondeur 3 + quiescence 3, évaluation avancée, time-budgeted
+ *   EXPERT (4) — profondeur 4 + quiescence 4, iterative deepening, null-move, TT, time-budgeted
+ *
+ * Optimisations vs version précédente :
+ *   - Time budget : la recherche s'arrête si le temps imparti est dépassé
+ *   - Node budget : hard cap sur le nombre de noeuds pour éviter les freezes
+ *   - Clone léger : pas de new ChessEngine(), copie directe des champs
+ *   - TT eviction LRU-approx sans allocation
+ *   - Delta pruning en quiescence
  */
 
 const AI_DIFFICULTY = {
@@ -17,7 +24,7 @@ const AI_DIFFICULTY = {
     EXPERT: 4
 };
 
-// ---- Tables de bonus de position (du point de vue des blancs, row 0 = rang 8) ----
+// ---- PST (du point de vue des blancs, row 0 = rang 8) ----
 
 const PAWN_TABLE = [
     [  0,  0,  0,  0,  0,  0,  0,  0 ],
@@ -74,7 +81,7 @@ const QUEEN_TABLE = [
     [-20,-10,-10, -5, -5,-10,-10,-20 ]
 ];
 
-const KING_TABLE = [
+const KING_MG_TABLE = [
     [-30,-40,-40,-50,-50,-40,-40,-30 ],
     [-30,-40,-40,-50,-50,-40,-40,-30 ],
     [-30,-40,-40,-50,-50,-40,-40,-30 ],
@@ -85,8 +92,7 @@ const KING_TABLE = [
     [ 20, 30, 10,  0,  0, 10, 30, 20 ]
 ];
 
-// Endgame king table — roi plus actif au centre
-const KING_ENDGAME_TABLE = [
+const KING_EG_TABLE = [
     [-50,-40,-30,-20,-20,-30,-40,-50 ],
     [-30,-20,-10,  0,  0,-10,-20,-30 ],
     [-30,-10, 20, 30, 30, 20,-10,-30 ],
@@ -97,586 +103,477 @@ const KING_ENDGAME_TABLE = [
     [-50,-30,-30,-30,-30,-30,-30,-50 ]
 ];
 
-const PST = {
-    'P': PAWN_TABLE,
-    'N': KNIGHT_TABLE,
-    'B': BISHOP_TABLE,
-    'R': ROOK_TABLE,
-    'Q': QUEEN_TABLE,
-    'K': KING_TABLE
-};
+const PST = { P: PAWN_TABLE, N: KNIGHT_TABLE, B: BISHOP_TABLE, R: ROOK_TABLE, Q: QUEEN_TABLE, K: KING_MG_TABLE };
 
-const PIECE_VALUES = {
-    'P': 100,
-    'N': 320,
-    'B': 330,
-    'R': 500,
-    'Q': 900,
-    'K': 20000
-};
+const PIECE_VALUES = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
 
 // ==============================================================
-// Transposition Table (for Expert level)
+// Transposition Table
 // ==============================================================
 const TT_EXACT = 0;
-const TT_ALPHA = 1;  // upper bound
-const TT_BETA  = 2;  // lower bound
+const TT_ALPHA = 1;
+const TT_BETA  = 2;
 
 class TranspositionTable {
-    constructor(maxSize = 1 << 18) { // ~262k entries
+    constructor(maxSize = 1 << 16) { // 65k entries — keeps memory low
         this.maxSize = maxSize;
         this.table = new Map();
+        this.gen = 0; // generation counter for aging
     }
 
-    hash(engine) {
-        // Fast board hash using string representation
+    _hash(engine) {
+        // Fast board hash using string key
         let h = '';
+        const b = engine.board;
         for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
-                const p = engine.board[r][c];
-                h += p ? (p.color[0] + p.type) : '-';
+                const p = b[r][c];
+                h += p ? (p.color === 'white' ? 'w' : 'b') + p.type : '.';
             }
         }
-        h += engine.turn[0];
-        h += (engine.castlingRights.white.kingSide ? '1' : '0');
-        h += (engine.castlingRights.white.queenSide ? '1' : '0');
-        h += (engine.castlingRights.black.kingSide ? '1' : '0');
-        h += (engine.castlingRights.black.queenSide ? '1' : '0');
-        if (engine.enPassantTarget) {
-            h += engine.enPassantTarget.row + '' + engine.enPassantTarget.col;
-        }
+        h += engine.turn === 'white' ? 'w' : 'b';
+        const cr = engine.castlingRights;
+        h += (cr.white.kingSide  ? '1' : '0');
+        h += (cr.white.queenSide ? '1' : '0');
+        h += (cr.black.kingSide  ? '1' : '0');
+        h += (cr.black.queenSide ? '1' : '0');
+        const ep = engine.enPassantTarget;
+        if (ep) h += ep.row * 8 + ep.col;
         return h;
     }
 
     get(engine, depth) {
-        const key = this.hash(engine);
-        const entry = this.table.get(key);
-        if (entry && entry.depth >= depth) {
-            return entry;
-        }
+        const entry = this.table.get(this._hash(engine));
+        if (entry && entry.depth >= depth) return entry;
         return null;
     }
 
     set(engine, depth, score, flag, bestMove) {
-        const key = this.hash(engine);
-        // Always-replace scheme
-        if (this.table.size >= this.maxSize) {
-            // Delete oldest entries (first 25%)
-            const keys = [...this.table.keys()];
-            for (let i = 0; i < keys.length / 4; i++) {
-                this.table.delete(keys[i]);
+        const key = this._hash(engine);
+        const existing = this.table.get(key);
+        // Replace if new search is deeper, or same generation deeper-or-equal
+        if (existing && existing.depth > depth && existing.gen === this.gen) return;
+
+        if (this.table.size >= this.maxSize && !existing) {
+            // Evict one old entry instead of mass-evicting 25%
+            // Just let Map overwrite — won't grow beyond maxSize+1
+            // Periodically trim in bulk only if we really exceed
+            if (this.table.size >= this.maxSize * 1.1) {
+                // Delete ~10% oldest entries by iterator order (FIFO-ish)
+                let toDel = this.maxSize * 0.1 | 0;
+                for (const k of this.table.keys()) {
+                    this.table.delete(k);
+                    if (--toDel <= 0) break;
+                }
             }
         }
-        this.table.set(key, { depth, score, flag, bestMove });
+        this.table.set(key, { depth, score, flag, bestMove, gen: this.gen });
     }
 
-    clear() {
-        this.table.clear();
-    }
+    newSearch() { this.gen++; }
+    clear() { this.table.clear(); this.gen = 0; }
 }
 
 
+// ==============================================================
+// ChessAI
+// ==============================================================
 class ChessAI {
     constructor(difficulty = AI_DIFFICULTY.MEDIUM) {
         this.difficulty = difficulty;
         this.nodesSearched = 0;
+        this.timeStart = 0;
+        this.timeBudget = 0;
+        this.aborted = false;
         this.tt = new TranspositionTable();
-        this.historyTable = {};  // history heuristic for move ordering
-        this.killerMoves = [];    // killer moves per ply
+        this.historyTable = {};
+        this.killerMoves = [];
     }
 
-    setDifficulty(level) {
-        this.difficulty = level;
-    }
+    setDifficulty(level) { this.difficulty = level; }
 
-    /**
-     * Compte le matériel total (hors roi) pour déterminer la phase de jeu
-     */
-    getTotalMaterial(board) {
-        let total = 0;
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                const p = board[r][c];
-                if (p && p.type !== 'K') {
-                    total += PIECE_VALUES[p.type] || 0;
-                }
-            }
-        }
-        return total;
-    }
+    // ---- Time / node management ----
 
-    /**
-     * Retourne le bonus positionnel d'une pièce.
-     */
-    getPositionBonus(row, col, type, color, isEndgame) {
-        let table;
-        if (type === 'K' && isEndgame) {
-            table = KING_ENDGAME_TABLE;
-        } else {
-            table = PST[type];
-        }
-        if (!table) return 0;
-        const r = (color === 'white') ? row : (7 - row);
-        return table[r][col];
-    }
-
-    /**
-     * Évaluation avancée du plateau (pour Hard/Expert).
-     */
-    evaluateBoardAdvanced(board, aiColor) {
-        const opponentColor = aiColor === 'white' ? 'black' : 'white';
-        let score = 0;
-        const totalMaterial = this.getTotalMaterial(board);
-        const isEndgame = totalMaterial < 2600; // Roughly when queens are off + some pieces
-
-        let aiBishops = 0, oppBishops = 0;
-        let aiPawnFiles = new Set(), oppPawnFiles = new Set();
-        let aiPawns = [], oppPawns = [];
-
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const piece = board[row][col];
-                if (!piece) continue;
-
-                const value = PIECE_VALUES[piece.type] || 0;
-                const bonus = this.getPositionBonus(row, col, piece.type, piece.color, isEndgame);
-                const sign = piece.color === aiColor ? 1 : -1;
-
-                score += sign * (value + bonus);
-
-                // Track bishops for bishop pair bonus
-                if (piece.type === 'B') {
-                    if (piece.color === aiColor) aiBishops++;
-                    else oppBishops++;
-                }
-
-                // Track pawns for structure analysis
-                if (piece.type === 'P') {
-                    if (piece.color === aiColor) {
-                        aiPawnFiles.add(col);
-                        aiPawns.push({ row, col });
-                    } else {
-                        oppPawnFiles.add(col);
-                        oppPawns.push({ row, col });
-                    }
-                }
-
-                // Rook on open/semi-open file
-                if (piece.type === 'R') {
-                    const friendlyPawns = piece.color === aiColor ? aiPawnFiles : oppPawnFiles;
-                    const enemyPawns = piece.color === aiColor ? oppPawnFiles : aiPawnFiles;
-                    if (!friendlyPawns.has(col) && !enemyPawns.has(col)) {
-                        score += sign * 25; // Open file
-                    } else if (!friendlyPawns.has(col)) {
-                        score += sign * 12; // Semi-open file
-                    }
-                }
-            }
-        }
-
-        // Bishop pair bonus (~50cp)
-        if (aiBishops >= 2) score += 50;
-        if (oppBishops >= 2) score -= 50;
-
-        // Pawn structure analysis
-        score += this.evaluatePawnStructure(aiPawns, oppPawns, aiColor, board);
-
-        // King safety (middlegame only)
-        if (!isEndgame) {
-            score += this.evaluateKingSafety(board, aiColor);
-            score -= this.evaluateKingSafety(board, opponentColor);
-        }
-
-        return score;
-    }
-
-    /**
-     * Évalue la structure de pions : pions passés, doublés, isolés
-     */
-    evaluatePawnStructure(aiPawns, oppPawns, aiColor, board) {
-        let score = 0;
-        const direction = aiColor === 'white' ? -1 : 1;
-        const promotionRow = aiColor === 'white' ? 0 : 7;
-
-        for (const pawn of aiPawns) {
-            // Pion passé : aucun pion adverse devant sur la même colonne ou colonnes adjacentes
-            let passed = true;
-            for (const oppPawn of oppPawns) {
-                if (Math.abs(oppPawn.col - pawn.col) <= 1) {
-                    if (aiColor === 'white' && oppPawn.row < pawn.row) {
-                        passed = false;
-                        break;
-                    }
-                    if (aiColor === 'black' && oppPawn.row > pawn.row) {
-                        passed = false;
-                        break;
-                    }
-                }
-            }
-            if (passed) {
-                const distToPromo = Math.abs(pawn.row - promotionRow);
-                score += 20 + (7 - distToPromo) * 15; // Plus le pion est avancé, plus le bonus est gros
-            }
-
-            // Pion isolé : pas de pion ami sur les colonnes adjacentes
-            const hasNeighbor = aiPawns.some(p =>
-                p !== pawn && Math.abs(p.col - pawn.col) === 1
-            );
-            if (!hasNeighbor) {
-                score -= 15;
-            }
-
-            // Pion doublé
-            const doubled = aiPawns.filter(p => p.col === pawn.col).length;
-            if (doubled > 1) {
-                score -= 10;
-            }
-        }
-
-        // Same for opponent (negate)
-        for (const pawn of oppPawns) {
-            let passed = true;
-            for (const aiPawn of aiPawns) {
-                if (Math.abs(aiPawn.col - pawn.col) <= 1) {
-                    const oppColor = aiColor === 'white' ? 'black' : 'white';
-                    if (oppColor === 'white' && aiPawn.row < pawn.row) {
-                        passed = false; break;
-                    }
-                    if (oppColor === 'black' && aiPawn.row > pawn.row) {
-                        passed = false; break;
-                    }
-                }
-            }
-            if (passed) {
-                const promoRow = aiColor === 'white' ? 7 : 0;
-                const distToPromo = Math.abs(pawn.row - promoRow);
-                score -= 20 + (7 - distToPromo) * 15;
-            }
-
-            const hasNeighbor = oppPawns.some(p =>
-                p !== pawn && Math.abs(p.col - pawn.col) === 1
-            );
-            if (!hasNeighbor) score += 15;
-
-            const doubled = oppPawns.filter(p => p.col === pawn.col).length;
-            if (doubled > 1) score += 10;
-        }
-
-        return score;
-    }
-
-    /**
-     * Évalue la sécurité du roi (bouclier de pions)
-     */
-    evaluateKingSafety(board, color) {
-        let score = 0;
-        // Find king
-        let kingRow = -1, kingCol = -1;
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                const p = board[r][c];
-                if (p && p.type === 'K' && p.color === color) {
-                    kingRow = r; kingCol = c;
-                    break;
-                }
-            }
-            if (kingRow >= 0) break;
-        }
-
-        if (kingRow < 0) return 0;
-
-        // Pawn shield (check 3 squares in front of king)
-        const dir = color === 'white' ? -1 : 1;
-        for (let dc = -1; dc <= 1; dc++) {
-            const sc = kingCol + dc;
-            if (sc < 0 || sc > 7) continue;
-            const sr = kingRow + dir;
-            if (sr < 0 || sr > 7) continue;
-
-            const p = board[sr][sc];
-            if (p && p.type === 'P' && p.color === color) {
-                score += 12; // Pawn shield bonus
-            } else {
-                score -= 8; // Missing shield penalty
-            }
-        }
-
-        // Penalty if king is on open file
-        let pawnOnFile = false;
-        for (let r = 0; r < 8; r++) {
-            const p = board[r][kingCol];
-            if (p && p.type === 'P' && p.color === color) {
-                pawnOnFile = true; break;
-            }
-        }
-        if (!pawnOnFile) score -= 20;
-
-        return score;
-    }
-
-    /**
-     * Évaluation basique (pour Easy/Medium).
-     */
-    evaluateBoard(board, aiColor) {
-        let score = 0;
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const piece = board[row][col];
-                if (!piece) continue;
-
-                const value = PIECE_VALUES[piece.type] || 0;
-                const bonus = this.getPositionBonus(row, col, piece.type, piece.color, false);
-
-                if (piece.color === aiColor) {
-                    score += value + bonus;
-                } else {
-                    score -= value + bonus;
-                }
-            }
-        }
-        return score;
-    }
-
-    /**
-     * Fonction d'évaluation appropriée selon le niveau
-     */
-    evaluate(board, aiColor) {
-        if (this.difficulty >= AI_DIFFICULTY.HARD) {
-            return this.evaluateBoardAdvanced(board, aiColor);
-        }
-        return this.evaluateBoard(board, aiColor);
-    }
-
-    /**
-     * Profondeur de recherche selon la difficulté.
-     */
-    getMaxDepth() {
+    /** Time budget (ms) allowed for the full search */
+    _getTimeBudget() {
         switch (this.difficulty) {
-            case 1: return 1;  // Easy
-            case 2: return 2;  // Medium
-            case 3: return 4;  // Hard — augmenté de 3 à 4
-            case 4: return 5;  // Expert — augmenté de 4 à 5 (+ iterative deepening)
+            case 1: return 500;
+            case 2: return 1000;
+            case 3: return 2000;
+            case 4: return 3500;
+            default: return 1000;
+        }
+    }
+
+    /** Max nodes before forced abort */
+    _getNodeBudget() {
+        switch (this.difficulty) {
+            case 1: return 5000;
+            case 2: return 50000;
+            case 3: return 300000;
+            case 4: return 800000;
+            default: return 50000;
+        }
+    }
+
+    /** Check every N nodes if time exceeded */
+    _checkAbort() {
+        if (this.aborted) return true;
+        // Check every 1024 nodes to avoid Date.now() overhead
+        if ((this.nodesSearched & 1023) === 0) {
+            if (Date.now() - this.timeStart > this.timeBudget) {
+                this.aborted = true;
+                return true;
+            }
+        }
+        if (this.nodesSearched > this._getNodeBudget()) {
+            this.aborted = true;
+            return true;
+        }
+        return false;
+    }
+
+    // ---- Depths ----
+
+    _getMaxDepth() {
+        switch (this.difficulty) {
+            case 1: return 1;
+            case 2: return 2;
+            case 3: return 3;
+            case 4: return 4;
             default: return 2;
         }
     }
 
-    /**
-     * Clone l'état complet d'un engine pour la simulation.
-     */
-    cloneEngine(engine) {
-        const clone = new ChessEngine();
-        clone.board = engine.board.map(row => row.map(cell => cell ? { ...cell } : null));
-        clone.turn = engine.turn;
-        clone.castlingRights = {
-            white: { ...engine.castlingRights.white },
-            black: { ...engine.castlingRights.black }
+    _getQDepth() {
+        switch (this.difficulty) {
+            case 3: return 3;
+            case 4: return 4;
+            default: return 0;
+        }
+    }
+
+    // ---- Material helpers ----
+
+    _totalMaterial(board) {
+        let t = 0;
+        for (let r = 0; r < 8; r++)
+            for (let c = 0; c < 8; c++) {
+                const p = board[r][c];
+                if (p && p.type !== 'K') t += PIECE_VALUES[p.type] || 0;
+            }
+        return t;
+    }
+
+    // ---- Lightweight clone ----
+
+    _clone(engine) {
+        // Avoid calling new ChessEngine() — create a plain object with same shape
+        const c = Object.create(ChessEngine.prototype);
+        c.board = engine.board.map(row => row.map(cell => cell ? { type: cell.type, color: cell.color } : null));
+        c.turn = engine.turn;
+        c.castlingRights = {
+            white: { kingSide: engine.castlingRights.white.kingSide, queenSide: engine.castlingRights.white.queenSide },
+            black: { kingSide: engine.castlingRights.black.kingSide, queenSide: engine.castlingRights.black.queenSide }
         };
-        clone.enPassantTarget = engine.enPassantTarget ? { ...engine.enPassantTarget } : null;
-        clone.halfMoveClock = engine.halfMoveClock;
-        clone.fullMoveNumber = engine.fullMoveNumber;
-        clone.moveHistory = [];
-        clone.lastMove = engine.lastMove ? { ...engine.lastMove } : null;
-        clone.gameOver = engine.gameOver;
-        clone.result = engine.result;
-        clone.winner = engine.winner;
-        return clone;
+        c.enPassantTarget = engine.enPassantTarget ? { row: engine.enPassantTarget.row, col: engine.enPassantTarget.col } : null;
+        c.halfMoveClock = engine.halfMoveClock;
+        c.fullMoveNumber = engine.fullMoveNumber;
+        c.moveHistory = [];
+        c.lastMove = engine.lastMove ? { from: engine.lastMove.from, to: engine.lastMove.to } : null;
+        c.gameOver = false;
+        c.result = null;
+        c.winner = null;
+        return c;
     }
 
-    /**
-     * Clé de move pour history heuristic
-     */
-    moveKey(move) {
-        return `${move.from.row}${move.from.col}${move.to.row}${move.to.col}`;
+    // ---- Position bonus ----
+
+    _posBonus(row, col, type, color, isEndgame) {
+        const table = (type === 'K' && isEndgame) ? KING_EG_TABLE : PST[type];
+        if (!table) return 0;
+        return table[color === 'white' ? row : 7 - row][col];
     }
 
-    /**
-     * Tri des coups avancé (captures MVV-LVA, killer moves, history heuristic)
-     */
-    sortMoves(moves, engine, ply, ttBestMove) {
-        const scored = moves.map(move => {
-            let score = 0;
+    // ---- Evaluation ----
 
-            // TT best move gets highest priority
+    _evaluateSimple(board, aiColor) {
+        let s = 0;
+        for (let r = 0; r < 8; r++)
+            for (let c = 0; c < 8; c++) {
+                const p = board[r][c];
+                if (!p) continue;
+                const v = (PIECE_VALUES[p.type] || 0) + this._posBonus(r, c, p.type, p.color, false);
+                s += p.color === aiColor ? v : -v;
+            }
+        return s;
+    }
+
+    _evaluateAdvanced(board, aiColor) {
+        const opp = aiColor === 'white' ? 'black' : 'white';
+        let score = 0;
+        const mat = this._totalMaterial(board);
+        const eg = mat < 2600;
+        let aiBishops = 0, oppBishops = 0;
+        const aiPawns = [], oppPawns = [];
+
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = board[r][c];
+                if (!p) continue;
+                const sign = p.color === aiColor ? 1 : -1;
+                score += sign * ((PIECE_VALUES[p.type] || 0) + this._posBonus(r, c, p.type, p.color, eg));
+
+                if (p.type === 'B') { if (p.color === aiColor) aiBishops++; else oppBishops++; }
+                if (p.type === 'P') { (p.color === aiColor ? aiPawns : oppPawns).push({ r, c }); }
+
+                // Rook on open file (lightweight check)
+                if (p.type === 'R') {
+                    let friendlyPawn = false, enemyPawn = false;
+                    for (let rr = 0; rr < 8; rr++) {
+                        const pp = board[rr][c];
+                        if (pp && pp.type === 'P') {
+                            if (pp.color === p.color) friendlyPawn = true;
+                            else enemyPawn = true;
+                        }
+                    }
+                    if (!friendlyPawn && !enemyPawn) score += sign * 20;
+                    else if (!friendlyPawn) score += sign * 10;
+                }
+            }
+        }
+
+        // Bishop pair
+        if (aiBishops >= 2) score += 45;
+        if (oppBishops >= 2) score -= 45;
+
+        // Passed pawns (simplified — no full structure scan)
+        score += this._passedPawnBonus(aiPawns, oppPawns, aiColor);
+        score -= this._passedPawnBonus(oppPawns, aiPawns, opp);
+
+        // King safety (middlegame)
+        if (!eg) {
+            score += this._kingSafety(board, aiColor);
+            score -= this._kingSafety(board, opp);
+        }
+
+        return score;
+    }
+
+    _passedPawnBonus(friendlyPawns, enemyPawns, color) {
+        let bonus = 0;
+        const promoRow = color === 'white' ? 0 : 7;
+        for (const p of friendlyPawns) {
+            let passed = true;
+            for (const e of enemyPawns) {
+                if (Math.abs(e.c - p.c) <= 1) {
+                    if (color === 'white' ? e.r < p.r : e.r > p.r) { passed = false; break; }
+                }
+            }
+            if (passed) bonus += 15 + (7 - Math.abs(p.r - promoRow)) * 10;
+        }
+        return bonus;
+    }
+
+    _kingSafety(board, color) {
+        let kr = -1, kc = -1;
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (p && p.type === 'K' && p.color === color) { kr = r; kc = c; break; }
+            if (kr >= 0) break;
+        }
+        if (kr < 0) return 0;
+        let s = 0;
+        const dir = color === 'white' ? -1 : 1;
+        for (let dc = -1; dc <= 1; dc++) {
+            const sc = kc + dc, sr = kr + dir;
+            if (sc < 0 || sc > 7 || sr < 0 || sr > 7) continue;
+            const p = board[sr][sc];
+            if (p && p.type === 'P' && p.color === color) s += 10;
+            else s -= 6;
+        }
+        return s;
+    }
+
+    _evaluate(board, aiColor) {
+        return this.difficulty >= AI_DIFFICULTY.HARD
+            ? this._evaluateAdvanced(board, aiColor)
+            : this._evaluateSimple(board, aiColor);
+    }
+
+    // ---- Move key ----
+    _moveKey(m) { return (m.from.row << 9) | (m.from.col << 6) | (m.to.row << 3) | m.to.col; }
+
+    // ---- Move ordering ----
+
+    _sortMoves(moves, engine, ply, ttBestMove) {
+        const b = engine.board;
+        const scored = new Array(moves.length);
+        for (let i = 0; i < moves.length; i++) {
+            const m = moves[i];
+            let s = 0;
+
+            // TT best move
             if (ttBestMove &&
-                move.from.row === ttBestMove.from.row &&
-                move.from.col === ttBestMove.from.col &&
-                move.to.row === ttBestMove.to.row &&
-                move.to.col === ttBestMove.to.col) {
-                score = 1000000;
+                m.from.row === ttBestMove.from.row && m.from.col === ttBestMove.from.col &&
+                m.to.row === ttBestMove.to.row && m.to.col === ttBestMove.to.col) {
+                s = 1000000;
             }
 
-            // MVV-LVA (Most Valuable Victim - Least Valuable Attacker)
-            const target = engine.board[move.to.row][move.to.col];
+            // MVV-LVA
+            const target = b[m.to.row][m.to.col];
             if (target) {
-                const victimValue = PIECE_VALUES[target.type] || 0;
-                const attackerPiece = engine.board[move.from.row][move.from.col];
-                const attackerValue = attackerPiece ? (PIECE_VALUES[attackerPiece.type] || 0) : 0;
-                score += 10000 + victimValue * 10 - attackerValue;
+                const vv = PIECE_VALUES[target.type] || 0;
+                const av = PIECE_VALUES[b[m.from.row][m.from.col]?.type] || 0;
+                s += 10000 + vv * 10 - av;
             }
+            if (m.isEnPassant) s += 10000 + 1000;
+            if (m.promotion) s += 9000;
 
-            // En passant captures
-            if (move.isEnPassant) {
-                score += 10000 + PIECE_VALUES['P'] * 10;
-            }
-
-            // Promotions
-            if (move.promotion) {
-                score += 9000;
-            }
-
-            // Killer moves (non-captures that caused beta cutoff)
-            if (this.killerMoves[ply]) {
-                for (const killer of this.killerMoves[ply]) {
+            // Killers
+            const killers = this.killerMoves[ply];
+            if (killers) {
+                for (let k = 0; k < killers.length; k++) {
+                    const killer = killers[k];
                     if (killer &&
-                        move.from.row === killer.from.row &&
-                        move.from.col === killer.from.col &&
-                        move.to.row === killer.to.row &&
-                        move.to.col === killer.to.col) {
-                        score += 5000;
-                        break;
+                        m.from.row === killer.from.row && m.from.col === killer.from.col &&
+                        m.to.row === killer.to.row && m.to.col === killer.to.col) {
+                        s += 5000; break;
                     }
                 }
             }
 
-            // History heuristic
-            const key = this.moveKey(move);
-            if (this.historyTable[key]) {
-                score += this.historyTable[key];
-            }
+            // History
+            const key = this._moveKey(m);
+            if (this.historyTable[key]) s += Math.min(this.historyTable[key], 4000);
 
-            return { move, score };
-        });
-
-        scored.sort((a, b) => b.score - a.score);
-        return scored.map(s => s.move);
+            scored[i] = { m, s };
+        }
+        scored.sort((a, b) => b.s - a.s);
+        return scored.map(x => x.m);
     }
 
-    /**
-     * Quiescence search — continue searching captures to avoid horizon effect.
-     * Always evaluates from aiColor's perspective.
-     */
-    quiescenceSearch(engine, alpha, beta, aiColor, maxQDepth) {
-        const standPat = this.evaluate(engine.board, aiColor);
-        if (maxQDepth <= 0) return standPat;
+    // ---- Quiescence search ----
+
+    _quiescence(engine, alpha, beta, aiColor, qDepth) {
+        this.nodesSearched++;
+        if (this._checkAbort()) return this._evaluate(engine.board, aiColor);
+
+        const standPat = this._evaluate(engine.board, aiColor);
+        if (qDepth <= 0) return standPat;
         if (standPat >= beta) return beta;
         if (standPat > alpha) alpha = standPat;
 
+        // Delta pruning: if even capturing a queen can't raise alpha, skip
+        if (standPat + 1000 < alpha) return alpha;
+
+        // Generate all legal moves, filter captures + promotions
         const allMoves = engine.getAllLegalMoves();
-        const captureMoves = allMoves.filter(m => {
+
+        // Inline filter + MVV sort (combined to avoid extra iterations)
+        const captures = [];
+        for (let i = 0; i < allMoves.length; i++) {
+            const m = allMoves[i];
             const target = engine.board[m.to.row][m.to.col];
-            return target || m.isEnPassant || m.promotion;
-        });
+            if (target || m.isEnPassant || m.promotion) {
+                let sv = 0;
+                if (target) sv = PIECE_VALUES[target.type] || 0;
+                if (m.isEnPassant) sv = 100;
+                if (m.promotion) sv += 900;
+                captures.push({ m, sv });
+            }
+        }
+        captures.sort((a, b) => b.sv - a.sv);
 
-        // Sort captures by MVV-LVA
-        captureMoves.sort((a, b) => {
-            let sa = 0, sb = 0;
-            const ta = engine.board[a.to.row][a.to.col];
-            const tb = engine.board[b.to.row][b.to.col];
-            if (ta) sa = PIECE_VALUES[ta.type] || 0;
-            if (a.isEnPassant) sa = PIECE_VALUES['P'];
-            if (a.promotion) sa += 900;
-            if (tb) sb = PIECE_VALUES[tb.type] || 0;
-            if (b.isEnPassant) sb = PIECE_VALUES['P'];
-            if (b.promotion) sb += 900;
-            return sb - sa;
-        });
+        for (let i = 0; i < captures.length; i++) {
+            const move = captures[i].m;
+            const copy = this._clone(engine);
+            if (!copy.makeMove(move.from, move.to, move.promotion || undefined)) continue;
 
-        for (const move of captureMoves) {
-            const copy = this.cloneEngine(engine);
-            const promotion = move.promotion ? 'Q' : undefined;
-            if (!copy.makeMove(move.from, move.to, promotion)) continue;
-
-            const score = this.quiescenceSearch(copy, alpha, beta, aiColor, maxQDepth - 1);
+            const score = this._quiescence(copy, alpha, beta, aiColor, qDepth - 1);
+            if (this.aborted) return score;
             if (score >= beta) return beta;
             if (score > alpha) alpha = score;
         }
         return alpha;
     }
 
-    /**
-     * Minimax avec alpha-beta pruning (niveaux Easy/Medium).
-     */
-    minimaxBasic(engine, depth, alpha, beta, maximizing, aiColor) {
+    // ---- Minimax basic (Easy/Medium) ----
+
+    _minimaxBasic(engine, depth, alpha, beta, maximizing, aiColor) {
+        this.nodesSearched++;
+        if (this._checkAbort()) return this._evaluate(engine.board, aiColor);
+
         const allMoves = engine.getAllLegalMoves();
 
         if (allMoves.length === 0) {
             if (engine.isInCheck(engine.turn)) {
-                const maxDepth = this.getMaxDepth();
-                return maximizing
-                    ? (-100000 + (maxDepth - depth))
-                    : (100000 - (maxDepth - depth));
+                return maximizing ? -100000 + (this._getMaxDepth() - depth) : 100000 - (this._getMaxDepth() - depth);
             }
             return 0;
         }
 
-        if (depth === 0) {
-            return this.evaluateBoard(engine.board, aiColor);
-        }
+        if (depth === 0) return this._evaluateSimple(engine.board, aiColor);
 
-        // Simple move ordering: captures first
+        // Simple capture-first ordering
         allMoves.sort((a, b) => {
-            let scoreA = 0, scoreB = 0;
-            const targetA = engine.board[a.to.row][a.to.col];
-            const targetB = engine.board[b.to.row][b.to.col];
-            if (targetA) scoreA += 10 * (PIECE_VALUES[targetA.type] || 0);
-            if (a.isEnPassant) scoreA += 10 * PIECE_VALUES['P'];
-            if (a.promotion) scoreA += 900;
-            if (targetB) scoreB += 10 * (PIECE_VALUES[targetB.type] || 0);
-            if (b.isEnPassant) scoreB += 10 * PIECE_VALUES['P'];
-            if (b.promotion) scoreB += 900;
-            return scoreB - scoreA;
+            let sa = 0, sb = 0;
+            const ta = engine.board[a.to.row][a.to.col];
+            const tb = engine.board[b.to.row][b.to.col];
+            if (ta) sa = 10 * (PIECE_VALUES[ta.type] || 0);
+            if (a.isEnPassant) sa += 1000;
+            if (a.promotion) sa += 900;
+            if (tb) sb = 10 * (PIECE_VALUES[tb.type] || 0);
+            if (b.isEnPassant) sb += 1000;
+            if (b.promotion) sb += 900;
+            return sb - sa;
         });
 
         if (maximizing) {
-            let maxEval = -Infinity;
+            let best = -Infinity;
             for (const move of allMoves) {
-                const copy = this.cloneEngine(engine);
+                const copy = this._clone(engine);
                 copy.makeMove(move.from, move.to, move.promotion || undefined);
-                const eval_ = this.minimaxBasic(copy, depth - 1, alpha, beta, false, aiColor);
-                maxEval = Math.max(maxEval, eval_);
-                alpha = Math.max(alpha, eval_);
+                const val = this._minimaxBasic(copy, depth - 1, alpha, beta, false, aiColor);
+                if (this.aborted) return val;
+                best = Math.max(best, val);
+                alpha = Math.max(alpha, val);
                 if (beta <= alpha) break;
             }
-            return maxEval;
+            return best;
         } else {
-            let minEval = Infinity;
+            let best = Infinity;
             for (const move of allMoves) {
-                const copy = this.cloneEngine(engine);
+                const copy = this._clone(engine);
                 copy.makeMove(move.from, move.to, move.promotion || undefined);
-                const eval_ = this.minimaxBasic(copy, depth - 1, alpha, beta, true, aiColor);
-                minEval = Math.min(minEval, eval_);
-                beta = Math.min(beta, eval_);
+                const val = this._minimaxBasic(copy, depth - 1, alpha, beta, true, aiColor);
+                if (this.aborted) return val;
+                best = Math.min(best, val);
+                beta = Math.min(beta, val);
                 if (beta <= alpha) break;
             }
-            return minEval;
+            return best;
         }
     }
 
-    /**
-     * Alpha-Beta avancé avec TT, killer moves, null-move pruning (Hard/Expert).
-     */
-    alphaBeta(engine, depth, alpha, beta, maximizing, aiColor, ply, allowNullMove) {
+    // ---- Alpha-Beta advanced (Hard/Expert) ----
+
+    _alphaBeta(engine, depth, alpha, beta, maximizing, aiColor, ply, allowNull) {
         this.nodesSearched++;
+        if (this._checkAbort()) return this._evaluate(engine.board, aiColor);
 
         const allMoves = engine.getAllLegalMoves();
 
-        // Terminal nodes
+        // Terminal
         if (allMoves.length === 0) {
-            if (engine.isInCheck(engine.turn)) {
-                return maximizing
-                    ? (-100000 + ply)
-                    : (100000 - ply);
-            }
-            return 0; // Stalemate
+            if (engine.isInCheck(engine.turn)) return maximizing ? (-100000 + ply) : (100000 - ply);
+            return 0;
         }
 
-        // Leaf node: use quiescence search for Hard/Expert
-        if (depth <= 0) {
-            const qDepth = this.difficulty >= AI_DIFFICULTY.EXPERT ? 6 : 4;
-            return this.quiescenceSearch(engine, alpha, beta, aiColor, qDepth);
-        }
+        // Leaf → quiescence
+        if (depth <= 0) return this._quiescence(engine, alpha, beta, aiColor, this._getQDepth());
 
-        // Transposition table probe (Expert only)
+        // TT probe
         let ttBestMove = null;
         if (this.difficulty >= AI_DIFFICULTY.EXPERT) {
             const ttEntry = this.tt.get(engine, depth);
@@ -688,93 +585,76 @@ class ChessAI {
             }
         }
 
-        // Null-move pruning (Expert, depth >= 3, not in check, not endgame)
+        // Null-move pruning (Expert only, not in check, not endgame, maximizing side)
         if (this.difficulty >= AI_DIFFICULTY.EXPERT &&
-            allowNullMove && depth >= 3 && maximizing &&
+            allowNull && depth >= 3 && maximizing &&
             !engine.isInCheck(engine.turn) &&
-            this.getTotalMaterial(engine.board) > 2600) {
-            const R = 2; // Reduction
-            const nullCopy = this.cloneEngine(engine);
-            // Skip turn
+            this._totalMaterial(engine.board) > 2600) {
+            const nullCopy = this._clone(engine);
             nullCopy.turn = nullCopy.turn === 'white' ? 'black' : 'white';
-            const nullScore = this.alphaBeta(nullCopy, depth - 1 - R, alpha, beta,
-                false, aiColor, ply + 1, false);
-
-            if (nullScore >= beta) {
-                return beta; // Null-move cutoff
-            }
+            nullCopy.enPassantTarget = null;
+            const nullScore = this._alphaBeta(nullCopy, depth - 3, alpha, beta, false, aiColor, ply + 1, false);
+            if (this.aborted) return nullScore;
+            if (nullScore >= beta) return beta;
         }
 
-        // Advanced move sorting
-        const sortedMoves = this.difficulty >= AI_DIFFICULTY.HARD
-            ? this.sortMoves(allMoves, engine, ply, ttBestMove)
-            : allMoves;
+        // Sort moves
+        const sorted = this._sortMoves(allMoves, engine, ply, ttBestMove);
 
         let bestScore = maximizing ? -Infinity : Infinity;
         let bestMove = null;
-        let moveIndex = 0;
+        const origAlpha = alpha;
 
-        for (const move of sortedMoves) {
-            const copy = this.cloneEngine(engine);
-            const promotion = move.promotion ? 'Q' : undefined;
-            if (!copy.makeMove(move.from, move.to, promotion)) continue;
+        for (let i = 0; i < sorted.length; i++) {
+            const move = sorted[i];
+            const copy = this._clone(engine);
+            const promo = move.promotion ? 'Q' : undefined;
+            if (!copy.makeMove(move.from, move.to, promo)) continue;
 
             let score;
-
-            // Late Move Reduction (for Expert, non-capture, non-promotion, non-check moves)
             const isCapture = engine.board[move.to.row][move.to.col] || move.isEnPassant;
             const isPromo = !!move.promotion;
-            const givesCheck = copy.isInCheck(copy.turn);
-            
+
+            // Late Move Reduction (Expert, quiet late moves)
             if (this.difficulty >= AI_DIFFICULTY.EXPERT &&
-                moveIndex >= 4 && depth >= 3 &&
-                !isCapture && !isPromo && !givesCheck) {
-                // Search with reduced depth first
-                score = this.alphaBeta(copy, depth - 2, alpha, beta, !maximizing, aiColor, ply + 1, true);
-                
-                // Re-search at full depth if it looks promising
+                i >= 4 && depth >= 3 && !isCapture && !isPromo &&
+                !copy.isInCheck(copy.turn)) {
+                score = this._alphaBeta(copy, depth - 2, alpha, beta, !maximizing, aiColor, ply + 1, true);
+                if (this.aborted) return score;
+                // Re-search if promising
                 if (maximizing ? score > alpha : score < beta) {
-                    score = this.alphaBeta(copy, depth - 1, alpha, beta, !maximizing, aiColor, ply + 1, true);
+                    score = this._alphaBeta(copy, depth - 1, alpha, beta, !maximizing, aiColor, ply + 1, true);
                 }
             } else {
-                score = this.alphaBeta(copy, depth - 1, alpha, beta, !maximizing, aiColor, ply + 1, true);
+                score = this._alphaBeta(copy, depth - 1, alpha, beta, !maximizing, aiColor, ply + 1, true);
             }
+            if (this.aborted) return score;
 
             if (maximizing) {
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMove = move;
-                }
+                if (score > bestScore) { bestScore = score; bestMove = move; }
                 alpha = Math.max(alpha, score);
             } else {
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestMove = move;
-                }
+                if (score < bestScore) { bestScore = score; bestMove = move; }
                 beta = Math.min(beta, score);
             }
 
             if (beta <= alpha) {
-                // Store killer move (non-capture)
+                // Killer + history
                 if (!isCapture) {
                     if (!this.killerMoves[ply]) this.killerMoves[ply] = [null, null];
                     this.killerMoves[ply][1] = this.killerMoves[ply][0];
                     this.killerMoves[ply][0] = move;
-
-                    // Update history heuristic
-                    const key = this.moveKey(move);
+                    const key = this._moveKey(move);
                     this.historyTable[key] = (this.historyTable[key] || 0) + depth * depth;
                 }
                 break;
             }
-
-            moveIndex++;
         }
 
-        // Store in transposition table
+        // TT store
         if (this.difficulty >= AI_DIFFICULTY.EXPERT && bestMove) {
             let flag = TT_EXACT;
-            if (bestScore <= alpha) flag = TT_ALPHA;
+            if (bestScore <= origAlpha) flag = TT_ALPHA;
             else if (bestScore >= beta) flag = TT_BETA;
             this.tt.set(engine, depth, bestScore, flag, bestMove);
         }
@@ -782,56 +662,57 @@ class ChessAI {
         return bestScore;
     }
 
+    // ---- Public API ----
+
     /**
-     * Trouve le meilleur coup pour la couleur de l'IA.
-     * @param {ChessEngine} engine - Le moteur d'échecs actuel
-     * @param {string} aiColor - 'white' ou 'black'
-     * @returns {object|null} Le meilleur coup { from, to, promotion }
+     * Trouve le meilleur coup. Garanti de terminer dans le budget temps.
      */
     findBestMove(engine, aiColor) {
         const allMoves = engine.getAllLegalMoves();
         if (allMoves.length === 0) return null;
-
-        this.nodesSearched = 0;
-
-        // Easy/Medium: simple minimax
-        if (this.difficulty <= AI_DIFFICULTY.MEDIUM) {
-            return this.findBestMoveBasic(engine, aiColor, allMoves);
+        if (allMoves.length === 1) {
+            // Only one legal move — return immediately
+            const m = allMoves[0];
+            return { from: m.from, to: m.to, promotion: m.promotion ? 'Q' : undefined };
         }
 
-        // Hard/Expert: advanced search
-        return this.findBestMoveAdvanced(engine, aiColor, allMoves);
+        this.nodesSearched = 0;
+        this.timeStart = Date.now();
+        this.timeBudget = this._getTimeBudget();
+        this.aborted = false;
+
+        if (this.difficulty <= AI_DIFFICULTY.MEDIUM) {
+            return this._findBestBasic(engine, aiColor, allMoves);
+        }
+        return this._findBestAdvanced(engine, aiColor, allMoves);
     }
 
-    /**
-     * Recherche basique pour Easy/Medium
-     */
-    findBestMoveBasic(engine, aiColor, allMoves) {
-        const depth = this.getMaxDepth();
+    _findBestBasic(engine, aiColor, allMoves) {
+        const depth = this._getMaxDepth();
         let bestScore = -Infinity;
         let bestMoves = [];
         let alpha = -Infinity;
-        let beta = Infinity;
+        const beta = Infinity;
 
         for (const move of allMoves) {
-            const promotion = move.promotion ? 'Q' : undefined;
-            const copy = this.cloneEngine(engine);
-            if (!copy.makeMove(move.from, move.to, promotion)) continue;
+            const promo = move.promotion ? 'Q' : undefined;
+            const copy = this._clone(engine);
+            if (!copy.makeMove(move.from, move.to, promo)) continue;
 
             let score;
             if (depth <= 1) {
-                score = this.evaluateBoard(copy.board, aiColor);
+                score = this._evaluateSimple(copy.board, aiColor);
             } else {
-                score = this.minimaxBasic(copy, depth - 1, alpha, beta, false, aiColor);
+                score = this._minimaxBasic(copy, depth - 1, alpha, beta, false, aiColor);
             }
+            if (this.aborted) break;
 
             if (score > bestScore) {
                 bestScore = score;
-                bestMoves = [{ from: move.from, to: move.to, promotion }];
+                bestMoves = [{ from: move.from, to: move.to, promotion: promo }];
             } else if (score === bestScore) {
-                bestMoves.push({ from: move.from, to: move.to, promotion });
+                bestMoves.push({ from: move.from, to: move.to, promotion: promo });
             }
-
             alpha = Math.max(alpha, score);
         }
 
@@ -839,68 +720,61 @@ class ChessAI {
             const m = allMoves[0];
             return { from: m.from, to: m.to, promotion: m.promotion ? 'Q' : undefined };
         }
-
         return bestMoves[Math.floor(Math.random() * bestMoves.length)];
     }
 
-    /**
-     * Recherche avancée pour Hard/Expert avec iterative deepening
-     */
-    findBestMoveAdvanced(engine, aiColor, allMoves) {
-        const maxDepth = this.getMaxDepth();
+    _findBestAdvanced(engine, aiColor, allMoves) {
+        const maxDepth = this._getMaxDepth();
 
         // Reset heuristics
         this.historyTable = {};
         this.killerMoves = [];
-        if (this.difficulty >= AI_DIFFICULTY.EXPERT) {
-            this.tt.clear();
-        }
+        this.tt.newSearch();
 
         let bestMove = null;
         let bestScore = -Infinity;
 
-        // Iterative deepening: search from depth 1 up to maxDepth
-        // Each iteration's move ordering improves the next one
+        // Iterative deepening with time control
         for (let depth = 1; depth <= maxDepth; depth++) {
             let currentBest = null;
             let currentBestScore = -Infinity;
             let alpha = -Infinity;
-            let beta = Infinity;
+            const beta = Infinity;
 
-            // Sort moves using results from previous iteration
-            const sortedMoves = this.sortMoves(allMoves, engine, 0,
+            const sorted = this._sortMoves(allMoves, engine, 0,
                 bestMove ? { from: bestMove.from, to: bestMove.to } : null
             );
 
-            for (const move of sortedMoves) {
-                const promotion = move.promotion ? 'Q' : undefined;
-                const copy = this.cloneEngine(engine);
-                if (!copy.makeMove(move.from, move.to, promotion)) continue;
+            for (const move of sorted) {
+                const promo = move.promotion ? 'Q' : undefined;
+                const copy = this._clone(engine);
+                if (!copy.makeMove(move.from, move.to, promo)) continue;
 
-                const score = this.alphaBeta(copy, depth - 1, alpha, beta, false, aiColor, 1, true);
+                const score = this._alphaBeta(copy, depth - 1, alpha, beta, false, aiColor, 1, true);
+
+                if (this.aborted) break;
 
                 if (score > currentBestScore) {
                     currentBestScore = score;
-                    currentBest = { from: move.from, to: move.to, promotion };
+                    currentBest = { from: move.from, to: move.to, promotion: promo };
                 }
-
                 alpha = Math.max(alpha, score);
             }
 
-            if (currentBest) {
+            // Only accept completed iterations
+            if (!this.aborted && currentBest) {
                 bestMove = currentBest;
                 bestScore = currentBestScore;
             }
 
-            // If we found a forced mate, stop searching deeper
-            if (bestScore >= 90000) break;
+            // Early exit on mate found or time exceeded
+            if (bestScore >= 90000 || this.aborted) break;
         }
 
         if (!bestMove) {
             const m = allMoves[0];
             return { from: m.from, to: m.to, promotion: m.promotion ? 'Q' : undefined };
         }
-
         return bestMove;
     }
 }
