@@ -913,6 +913,48 @@ body {
   display: none;
 }
 
+/* --- Connection Banner --- */
+.connection-banner {
+  width: 100%;
+  max-width: var(--board-size, 640px);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  animation: banner-pulse 1.5s ease-in-out infinite;
+  margin-bottom: 4px;
+}
+
+.connection-banner.hidden {
+  display: none;
+}
+
+.connection-banner.warning {
+  background: rgba(224, 168, 48, 0.15);
+  color: #e0a830;
+  border: 1px solid rgba(224, 168, 48, 0.3);
+}
+
+.connection-banner.error {
+  background: rgba(217, 72, 72, 0.15);
+  color: #d94848;
+  border: 1px solid rgba(217, 72, 72, 0.3);
+  animation: none;
+}
+
+.connection-banner.ok {
+  background: rgba(129, 182, 76, 0.15);
+  color: #81b64c;
+  border: 1px solid rgba(129, 182, 76, 0.3);
+  animation: none;
+}
+
+@keyframes banner-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* --- Status Bar --- */
 .status-row {
   display: flex;

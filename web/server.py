@@ -83,7 +83,10 @@ def generate_room_id():
 # --- WebSocket handler ---
 async def websocket_handler(request):
     """Gère la connexion WebSocket d'un joueur."""
-    ws = web.WebSocketResponse()
+    ws = web.WebSocketResponse(
+        heartbeat=20,        # Server sends ping every 20s
+        autoping=True,       # Auto-respond to client pings
+    )
     await ws.prepare(request)
 
     current_room = None
@@ -226,6 +229,13 @@ async def websocket_handler(request):
                         "type": "matchmaking_cancelled"
                     })
 
+                elif msg_type == "ping":
+                    # Client heartbeat — respond with pong
+                    try:
+                        await ws.send_json({"type": "pong"})
+                    except Exception:
+                        pass
+
                 elif msg_type == "move":
                     if current_room and current_room.started:
                         opponent = current_room.get_opponent(ws)
@@ -269,6 +279,82 @@ async def websocket_handler(request):
                                 "message": msg.get("message", "")
                             })
 
+                elif msg_type == "reconnect":
+                    # Client tries to rejoin a room after connection drop
+                    room_id = msg.get("room_id", "").upper().strip()
+                    color = msg.get("color")
+                    if room_id in rooms:
+                        room = rooms[room_id]
+                        # Find the disconnected player slot and replace ws
+                        old_ws = None
+                        for p_ws, p_color in list(room.players.items()):
+                            if p_color == color:
+                                old_ws = p_ws
+                                break
+                        if old_ws:
+                            # Swap ws reference
+                            room.players[ws] = color
+                            if old_ws in room.players:
+                                del room.players[old_ws]
+                            if room.host == old_ws:
+                                room.host = ws
+                            if room.guest == old_ws:
+                                room.guest = ws
+                            current_room = room
+                            in_matchmaking = False
+                            # Notify opponent about reconnection
+                            opponent = room.get_opponent(ws)
+                            if opponent and not opponent.closed:
+                                try:
+                                    await opponent.send_json({
+                                        "type": "opponent_reconnected"
+                                    })
+                                except Exception:
+                                    pass
+                            await ws.send_json({
+                                "type": "reconnected",
+                                "room_id": room_id,
+                                "color": color,
+                                "time": room.time_limit
+                            })
+                        else:
+                            await ws.send_json({
+                                "type": "reconnect_failed",
+                                "reason": "Color slot not found"
+                            })
+                    else:
+                        await ws.send_json({
+                            "type": "reconnect_failed",
+                            "reason": "Room not found"
+                        })
+
+                elif msg_type == "sync_request":
+                    # Opponent requests full move history to resync
+                    if current_room and current_room.started:
+                        opponent = current_room.get_opponent(ws)
+                        if opponent and not opponent.closed:
+                            try:
+                                await opponent.send_json({
+                                    "type": "sync_request"
+                                })
+                            except Exception:
+                                pass
+
+                elif msg_type == "sync_state":
+                    # Forward full game state to opponent (for resync)
+                    if current_room and current_room.started:
+                        opponent = current_room.get_opponent(ws)
+                        if opponent and not opponent.closed:
+                            try:
+                                await opponent.send_json({
+                                    "type": "sync_state",
+                                    "moves": msg.get("moves", []),
+                                    "white_time": msg.get("white_time"),
+                                    "black_time": msg.get("black_time")
+                                })
+                            except Exception:
+                                pass
+
             elif raw_message.type in (web.WSMsgType.ERROR, web.WSMsgType.CLOSE):
                 break
 
@@ -281,11 +367,51 @@ async def websocket_handler(request):
                 for time_limit, queue in matchmaking_queue.items():
                     queue[:] = [(w, f) for w, f in queue if w != ws]
 
-        if current_room:
+        if current_room and current_room.started:
+            # Game in progress — don't destroy room, allow reconnection
+            opponent = current_room.get_opponent(ws)
+            if opponent and not opponent.closed:
+                try:
+                    await opponent.send_json({
+                        "type": "opponent_disconnected"
+                    })
+                except Exception:
+                    pass
+
+            # Schedule room cleanup after 120s if player doesn't reconnect
+            room_id = current_room.room_id
+            disconnected_color = current_room.get_color(ws)
+
+            async def _delayed_cleanup():
+                await asyncio.sleep(120)
+                if room_id in rooms:
+                    room = rooms[room_id]
+                    # Check if the disconnected player is still gone
+                    still_gone = True
+                    for p_ws, p_color in room.players.items():
+                        if p_color == disconnected_color and not p_ws.closed:
+                            still_gone = False
+                            break
+                    if still_gone:
+                        # Notify remaining player
+                        for p_ws in list(room.players.keys()):
+                            if not p_ws.closed:
+                                try:
+                                    await p_ws.send_json({
+                                        "type": "opponent_disconnected_final"
+                                    })
+                                except Exception:
+                                    pass
+                        rooms.pop(room_id, None)
+
+            asyncio.ensure_future(_delayed_cleanup())
+
+        elif current_room:
+            # Game not started — clean up immediately
             opponent = current_room.get_opponent(ws)
             current_room.remove_player(ws)
 
-            if opponent:
+            if opponent and not opponent.closed:
                 try:
                     await opponent.send_json({
                         "type": "opponent_disconnected"
