@@ -91,6 +91,14 @@ def generate_room_id():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
 
 
+def find_room_for_ws(ws):
+    """Find the active room that this ws belongs to."""
+    for room in rooms.values():
+        if ws in room.players and room.started:
+            return room
+    return None
+
+
 # --- WebSocket handler ---
 async def websocket_handler(request):
     """Gère la connexion WebSocket d'un joueur."""
@@ -222,7 +230,7 @@ async def websocket_handler(request):
                                     except Exception:
                                         pass
 
-                                # Resolve the opponent's future so they know
+                                # Tell the waiting player's handler to update
                                 if not opponent_future.done():
                                     opponent_future.set_result(room)
                         else:
@@ -234,9 +242,6 @@ async def websocket_handler(request):
                                 "type": "matchmaking_waiting",
                                 "queue_size": len(queue)
                             })
-
-                            # Wait for match asynchronously (non-blocking)
-                            # The match will be resolved by the next player joining
 
                 elif msg_type == "matchmaking_cancel":
                     in_matchmaking = False
@@ -256,8 +261,10 @@ async def websocket_handler(request):
                         pass
 
                 elif msg_type == "move":
-                    if current_room and current_room.started:
-                        opponent = current_room.get_opponent(ws)
+                    active = current_room or find_room_for_ws(ws)
+                    if active:
+                        current_room = active
+                        opponent = active.get_opponent(ws)
                         if opponent and not opponent.closed:
                             move_msg = {
                                 "type": "move",
@@ -274,8 +281,10 @@ async def websocket_handler(request):
                                 pass
 
                 elif msg_type == "timeout":
-                    if current_room and current_room.started:
-                        opponent = current_room.get_opponent(ws)
+                    active = current_room or find_room_for_ws(ws)
+                    if active:
+                        current_room = active
+                        opponent = active.get_opponent(ws)
                         loser = msg.get("loser", "")
                         winner = "black" if loser == "white" else "white"
                         if opponent and not opponent.closed:
@@ -288,8 +297,10 @@ async def websocket_handler(request):
                                 pass
 
                 elif msg_type == "resign":
-                    if current_room and current_room.started:
-                        opponent = current_room.get_opponent(ws)
+                    active = current_room or find_room_for_ws(ws)
+                    if active:
+                        current_room = active
+                        opponent = active.get_opponent(ws)
                         if opponent and not opponent.closed:
                             try:
                                 await opponent.send_json({
@@ -299,13 +310,18 @@ async def websocket_handler(request):
                                 pass
 
                 elif msg_type == "chat":
-                    if current_room and current_room.started:
-                        opponent = current_room.get_opponent(ws)
-                        if opponent:
-                            await opponent.send_json({
-                                "type": "chat",
-                                "message": msg.get("message", "")
-                            })
+                    active = current_room or find_room_for_ws(ws)
+                    if active:
+                        current_room = active
+                        opponent = active.get_opponent(ws)
+                        if opponent and not opponent.closed:
+                            try:
+                                await opponent.send_json({
+                                    "type": "chat",
+                                    "message": msg.get("message", "")
+                                })
+                            except Exception:
+                                pass
 
                 elif msg_type == "reconnect":
                     # Client tries to rejoin a room after connection drop
@@ -358,8 +374,10 @@ async def websocket_handler(request):
 
                 elif msg_type == "sync_request":
                     # Opponent requests full move history to resync
-                    if current_room and current_room.started:
-                        opponent = current_room.get_opponent(ws)
+                    active = current_room or find_room_for_ws(ws)
+                    if active:
+                        current_room = active
+                        opponent = active.get_opponent(ws)
                         if opponent and not opponent.closed:
                             try:
                                 await opponent.send_json({
@@ -370,8 +388,10 @@ async def websocket_handler(request):
 
                 elif msg_type == "sync_state":
                     # Forward full game state to opponent (for resync)
-                    if current_room and current_room.started:
-                        opponent = current_room.get_opponent(ws)
+                    active = current_room or find_room_for_ws(ws)
+                    if active:
+                        current_room = active
+                        opponent = active.get_opponent(ws)
                         if opponent and not opponent.closed:
                             try:
                                 await opponent.send_json({
@@ -398,9 +418,11 @@ async def websocket_handler(request):
         # Clean up username
         player_names.pop(ws, None)
 
-        if current_room and current_room.started:
+        cleanup_room = current_room or find_room_for_ws(ws)
+        if cleanup_room and cleanup_room.started:
+            current_room = cleanup_room
             # Game in progress — don't destroy room, allow reconnection
-            opponent = current_room.get_opponent(ws)
+            opponent = cleanup_room.get_opponent(ws)
             if opponent and not opponent.closed:
                 try:
                     await opponent.send_json({
@@ -410,8 +432,8 @@ async def websocket_handler(request):
                     pass
 
             # Schedule room cleanup after 120s if player doesn't reconnect
-            room_id = current_room.room_id
-            disconnected_color = current_room.get_color(ws)
+            room_id = cleanup_room.room_id
+            disconnected_color = cleanup_room.get_color(ws)
 
             async def _delayed_cleanup():
                 await asyncio.sleep(120)
@@ -437,10 +459,10 @@ async def websocket_handler(request):
 
             asyncio.ensure_future(_delayed_cleanup())
 
-        elif current_room:
+        elif cleanup_room:
             # Game not started — clean up immediately
-            opponent = current_room.get_opponent(ws)
-            current_room.remove_player(ws)
+            opponent = cleanup_room.get_opponent(ws)
+            cleanup_room.remove_player(ws)
 
             if opponent and not opponent.closed:
                 try:
@@ -450,8 +472,8 @@ async def websocket_handler(request):
                 except Exception:
                     pass
 
-            if len(current_room.players) == 0:
-                rooms.pop(current_room.room_id, None)
+            if len(cleanup_room.players) == 0:
+                rooms.pop(cleanup_room.room_id, None)
 
     return ws
 
