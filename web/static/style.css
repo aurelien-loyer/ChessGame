@@ -98,6 +98,100 @@ body {
 
 
 /* =========================================================================
+   2.5. WELCOME SCREEN
+   ========================================================================= */
+
+.welcome-box {
+  text-align: center;
+  width: 100%;
+  max-width: 420px;
+  padding: 24px;
+  animation: welcome-fadein 0.6s ease;
+}
+
+@keyframes welcome-fadein {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.welcome-logo {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.welcome-logo .logo-piece {
+  font-size: 56px;
+}
+
+.welcome-title {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+
+.welcome-title span {
+  color: var(--accent);
+}
+
+.welcome-sub {
+  color: var(--t3);
+  font-size: 15px;
+  margin-bottom: 32px;
+}
+
+.welcome-input-wrap {
+  margin-bottom: 20px;
+}
+
+.welcome-input {
+  width: 100%;
+  padding: 16px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--t1);
+  background: var(--bg2);
+  border: 2px solid var(--brd);
+  border-radius: var(--r);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  letter-spacing: 0.05em;
+}
+
+.welcome-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.welcome-input::placeholder {
+  color: var(--t3);
+  font-weight: 400;
+}
+
+.welcome-input.shake {
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-8px); }
+  40%      { transform: translateX(8px); }
+  60%      { transform: translateX(-6px); }
+  80%      { transform: translateX(4px); }
+}
+
+.btn-enter {
+  width: 100%;
+  margin-top: 4px;
+}
+
+
+/* =========================================================================
    3. LOBBY INTERFACE
    ========================================================================= */
 

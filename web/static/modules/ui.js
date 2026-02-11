@@ -166,7 +166,7 @@ export class UIManager {
   /**
    * Update player labels and indicators
    */
-  updatePlayerInfo(myColor, gameMode, aiDifficulty = null) {
+  updatePlayerInfo(myColor, gameMode, aiDifficulty = null, opponentName = null, selfName = null) {
     this.myColor = myColor;
     const opponentColor = myColor === 'white' ? 'black' : 'white';
     
@@ -174,7 +174,8 @@ export class UIManager {
     this.opponentIndicator.className = `indicator ${opponentColor}-piece`;
     
     const colorName = myColor === 'white' ? 'Blancs' : 'Noirs';
-    this.selfLabel.textContent = `Vous (${colorName})`;
+    const displaySelf = selfName ? selfName : 'Vous';
+    this.selfLabel.textContent = `${displaySelf} (${colorName})`;
     
     if (gameMode === 'ai') {
       const diffNames = {
@@ -186,7 +187,7 @@ export class UIManager {
       };
       this.opponentLabel.textContent = 'IA ' + (diffNames[aiDifficulty] || '');
     } else {
-      this.opponentLabel.textContent = 'Adversaire';
+      this.opponentLabel.textContent = opponentName || 'Adversaire';
     }
   }
 

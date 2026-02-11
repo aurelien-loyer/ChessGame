@@ -32,8 +32,10 @@ class ChessApp {
     // State
     this.currentMode = 'online';
     this.selectedTime = 300;
+    this.username = null;
     
     // DOM References
+    this.welcomeScreen = $('welcome-screen');
     this.lobbyScreen = $('lobby');
     this.gameScreen = $('game');
     this.lobbyContent = $('lobby-content');
@@ -43,8 +45,56 @@ class ChessApp {
     this.inputRoom = $('input-room');
     
     // Initialize
+    this.setupWelcomeScreen();
     this.setupEventListeners();
     this.setupGameCallbacks();
+  }
+
+  /**
+   * Setup welcome screen
+   */
+  setupWelcomeScreen() {
+    const inputUsername = $('input-username');
+    const btnEnter = $('btn-enter');
+    
+    // Restore saved username
+    const saved = localStorage.getItem('chess_username');
+    if (saved) {
+      inputUsername.value = saved;
+    }
+
+    const enterLobby = () => {
+      const name = inputUsername.value.trim();
+      if (!name) {
+        inputUsername.classList.add('shake');
+        inputUsername.focus();
+        setTimeout(() => inputUsername.classList.remove('shake'), 500);
+        return;
+      }
+      this.username = name;
+      localStorage.setItem('chess_username', name);
+      
+      // Pass username to online game
+      this.onlineGame.username = name;
+      
+      // Show tagline with username
+      const tagline = $('welcome-tagline');
+      if (tagline) tagline.textContent = `Bienvenue, ${name} !`;
+      
+      // Transition
+      hide(this.welcomeScreen);
+      this.welcomeScreen.classList.remove('active');
+      show(this.lobbyScreen);
+      this.lobbyScreen.classList.add('active');
+    };
+
+    btnEnter.addEventListener('click', enterLobby);
+    inputUsername.addEventListener('keydown', e => {
+      if (e.key === 'Enter') enterLobby();
+    });
+
+    // Auto-focus
+    setTimeout(() => inputUsername.focus(), 200);
   }
 
   /**

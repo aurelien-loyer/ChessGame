@@ -60,6 +60,10 @@ export class OnlineGame {
 
     // Callbacks
     this.onGameEnd = null;
+
+    // Username
+    this.username = null;
+    this.opponentName = null;
   }
 
   // =======================================================================
@@ -107,6 +111,11 @@ export class OnlineGame {
       console.log('[Online] WebSocket connected');
       this._lastPong = Date.now();
       this._startPing();
+
+      // Send username
+      if (this.username) {
+        this.ws.send(JSON.stringify({ type: 'set_username', username: this.username }));
+      }
 
       // If reconnecting mid-game, re-join the room
       if (this._reconnecting && this._gameInProgress && this.roomId && this.myColor) {
@@ -282,6 +291,7 @@ export class OnlineGame {
       case 'game_start':
         this.myColor = msg.color;
         this.roomId = msg.room_id;
+        this.opponentName = msg.opponent_name || null;
         this.ui.boardFlipped = this.myColor === 'black';
         this._gameInProgress = true;
 
@@ -557,7 +567,7 @@ export class OnlineGame {
     show(this.btnResign);
     this._hideBanner();
 
-    this.ui.updatePlayerInfo(this.myColor, 'online');
+    this.ui.updatePlayerInfo(this.myColor, 'online', null, this.opponentName, this.username);
     this.ui.buildBoard(this.engine, (r, c) => this.onSquareClick(r, c));
     this.syncUI();
 
@@ -671,6 +681,8 @@ export class OnlineGame {
     this.engine.gameOver = true;
     this.engine.result = 'resign';
     this.engine.winner = this.myColor === 'white' ? 'black' : 'white';
+    this._gameInProgress = false;
+    this.stopTimer();
 
     this.ui.gameOverIcon.textContent = '🏳';
     this.ui.gameOverTitle.textContent = 'Abandon';

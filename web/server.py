@@ -34,6 +34,10 @@ matchmaking_queue = {}
 matchmaking_lock = asyncio.Lock()
 
 
+# --- Player usernames ---
+player_names = {}  # ws -> username string
+
+
 class Room:
     """Représente un salon de jeu avec deux joueurs."""
     def __init__(self, room_id, host_ws, time_limit=300):
@@ -50,6 +54,13 @@ class Room:
     def add_guest(self, ws):
         self.guest = ws
         self.players[ws] = None
+
+    def get_opponent_name(self, ws):
+        """Get the opponent's display name."""
+        opponent = self.get_opponent(ws)
+        if opponent:
+            return player_names.get(opponent, "Adversaire")
+        return "Adversaire"
 
     def assign_colors(self):
         """Assigne aléatoirement blanc/noir aux deux joueurs."""
@@ -106,6 +117,12 @@ async def websocket_handler(request):
 
                 msg_type = msg.get("type")
 
+                if msg_type == "set_username":
+                    name = msg.get("username", "").strip()[:20]
+                    if name:
+                        player_names[ws] = name
+                    continue
+
                 if msg_type == "create_room":
                     room_id = generate_room_id()
                     while room_id in rooms:
@@ -149,7 +166,8 @@ async def websocket_handler(request):
                             "type": "game_start",
                             "color": color,
                             "room_id": room_id,
-                            "time": room.time_limit
+                            "time": room.time_limit,
+                            "opponent_name": room.get_opponent_name(player_ws)
                         })
 
                 elif msg_type == "matchmaking_join":
@@ -198,7 +216,8 @@ async def websocket_handler(request):
                                             "color": color,
                                             "room_id": room_id,
                                             "time": room.time_limit,
-                                            "matchmade": True
+                                            "matchmade": True,
+                                            "opponent_name": room.get_opponent_name(player_ws)
                                         })
                                     except Exception:
                                         pass
@@ -239,7 +258,7 @@ async def websocket_handler(request):
                 elif msg_type == "move":
                     if current_room and current_room.started:
                         opponent = current_room.get_opponent(ws)
-                        if opponent:
+                        if opponent and not opponent.closed:
                             move_msg = {
                                 "type": "move",
                                 "from": msg["from"],
@@ -249,26 +268,35 @@ async def websocket_handler(request):
                             if "white_time" in msg:
                                 move_msg["white_time"] = msg["white_time"]
                                 move_msg["black_time"] = msg["black_time"]
-                            await opponent.send_json(move_msg)
+                            try:
+                                await opponent.send_json(move_msg)
+                            except Exception:
+                                pass
 
                 elif msg_type == "timeout":
                     if current_room and current_room.started:
                         opponent = current_room.get_opponent(ws)
                         loser = msg.get("loser", "")
                         winner = "black" if loser == "white" else "white"
-                        if opponent:
-                            await opponent.send_json({
-                                "type": "timeout",
-                                "winner": winner
-                            })
+                        if opponent and not opponent.closed:
+                            try:
+                                await opponent.send_json({
+                                    "type": "timeout",
+                                    "winner": winner
+                                })
+                            except Exception:
+                                pass
 
                 elif msg_type == "resign":
                     if current_room and current_room.started:
                         opponent = current_room.get_opponent(ws)
-                        if opponent:
-                            await opponent.send_json({
-                                "type": "opponent_resigned"
-                            })
+                        if opponent and not opponent.closed:
+                            try:
+                                await opponent.send_json({
+                                    "type": "opponent_resigned"
+                                })
+                            except Exception:
+                                pass
 
                 elif msg_type == "chat":
                     if current_room and current_room.started:
@@ -366,6 +394,9 @@ async def websocket_handler(request):
             async with matchmaking_lock:
                 for time_limit, queue in matchmaking_queue.items():
                     queue[:] = [(w, f) for w, f in queue if w != ws]
+
+        # Clean up username
+        player_names.pop(ws, None)
 
         if current_room and current_room.started:
             # Game in progress — don't destroy room, allow reconnection
