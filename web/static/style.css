@@ -376,7 +376,19 @@ body {
   color: var(--t3);
   font-weight: 500;
   font-size: 14px;
-}  letter-spacing: 0.02em;
+  letter-spacing: 0.02em;
+}
+
+.epitech-logo {
+  margin-top: 28px;
+  width: 140px;
+  opacity: 0.55;
+  filter: saturate(0) brightness(0.3);
+  transition: opacity 0.3s, filter 0.3s;
+}
+.epitech-logo:hover {
+  opacity: 0.85;
+  filter: saturate(1) brightness(1);
 }
 
 /* --- Responsive: stack cards on mobile --- */
