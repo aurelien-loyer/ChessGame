@@ -17,39 +17,37 @@
         <div class="ms-wrapper">
             <!-- Header -->
             <div class="ms-hero">
-                <div class="ms-hero-pieces">
-                    <span class="ms-hero-piece ms-hero-w">♔</span>
-                    <span class="ms-hero-vs">VS</span>
-                    <span class="ms-hero-piece ms-hero-b">♚</span>
-                </div>
-                <h1 class="ms-title">Chess<span>Arena</span></h1>
-                <p class="ms-subtitle">L'échiquier n'attend que vous</p>
+                <div class="ms-hero-icon">♔</div>
+                <h1 class="ms-title">Maître du Jeu</h1>
+                <p class="ms-subtitle">La stratégie pure, redéfinie.</p>
             </div>
 
             <!-- Cards -->
             <div class="ms-cards">
-                <button id="btn-mode-basic" class="ms-card ms-card-green">
-                    <div class="ms-card-bg"></div>
-                    <div class="ms-card-body">
-                        <span class="ms-card-emoji">⚔️</span>
-                        <span class="ms-card-title">Partie libre</span>
-                        <span class="ms-card-desc">Affrontez des joueurs en ligne, créez des salons privés ou défiez l'IA</span>
-                        <span class="ms-card-cta">Jouer <span class="ms-card-cta-arrow">→</span></span>
+                <button id="btn-mode-basic" class="ms-card ms-card-light">
+                    <div class="ms-card-content">
+                        <span class="ms-card-icon">⚡️</span>
+                        <div class="ms-card-text">
+                            <span class="ms-card-head">Multijoueur</span>
+                            <span class="ms-card-sub">Défiez le monde</span>
+                        </div>
                     </div>
+                    <div class="ms-card-arrow">→</div>
                 </button>
 
-                <button id="btn-mode-salon" class="ms-card ms-card-blue">
-                    <div class="ms-card-bg"></div>
-                    <div class="ms-card-body">
-                        <span class="ms-card-emoji">🤖</span>
-                        <span class="ms-card-title">Défi rapide</span>
-                        <span class="ms-card-desc">Lancez-vous directement dans une partie contre notre intelligence artificielle</span>
-                        <span class="ms-card-cta">Défier l'IA <span class="ms-card-cta-arrow">→</span></span>
+                <button id="btn-mode-salon" class="ms-card ms-card-accent">
+                    <div class="ms-card-content">
+                        <span class="ms-card-icon">🧠</span>
+                        <div class="ms-card-text">
+                            <span class="ms-card-head">Solo vs IA</span>
+                            <span class="ms-card-sub">Affrontez l'ordinateur</span>
+                        </div>
                     </div>
+                    <div class="ms-card-arrow">→</div>
                 </button>
             </div>
 
-            <p class="ms-footer">♟ Gratuit · Aucun compte requis · Jouez en 10 secondes</p>
+            <p class="ms-footer">Aucune inscription. Jeu immédiat.</p>
         </div>
     </div>
 
@@ -78,12 +76,9 @@
 
             <!-- Header -->
             <div class="lobby-header">
-                <div class="lobby-logo">
-                    <span class="logo-piece">♚</span>
-                    <span class="logo-piece accent">♛</span>
-                </div>
+                <div class="lobby-icon">♔</div>
                 <h1>Chess<span>Arena</span></h1>
-                <p class="tagline" id="welcome-tagline">La stratégie à portée de clic</p>
+                <p class="tagline" id="welcome-tagline">Prêt à en découdre ?</p>
             </div>
 
             <!-- Card -->
@@ -144,23 +139,13 @@
                 <!-- AI actions -->
                 <div id="ai-actions" class="actions-panel hidden">
                     <div class="field">
-                        <label class="field-label">🎯 Difficulté</label>
-                        <div class="diff-grid diff-grid-5">
-                            <button class="diff-btn diff" data-diff="1">
-                                <span class="diff-dot" style="background:#81b64c"></span>Facile
-                            </button>
-                            <button class="diff-btn diff active" data-diff="2">
-                                <span class="diff-dot" style="background:#e0a830"></span>Moyen
-                            </button>
-                            <button class="diff-btn diff" data-diff="3">
-                                <span class="diff-dot" style="background:#e07830"></span>Difficile
-                            </button>
-                            <button class="diff-btn diff" data-diff="4">
-                                <span class="diff-dot" style="background:#d94848"></span>Expert
-                            </button>
-                            <button class="diff-btn diff diff-gm" data-diff="5">
-                                <span class="diff-dot" style="background:linear-gradient(135deg,#ffd700,#ff6b00)"></span>👑 Grand Maître
-                            </button>
+                        <label class="field-label">Niveau de l'IA</label>
+                        <div class="segmented-control">
+                            <button class="diff-btn diff" data-diff="1">Novice</button>
+                            <button class="diff-btn diff active" data-diff="2">Inter.</button>
+                            <button class="diff-btn diff" data-diff="3">Expert</button>
+                            <button class="diff-btn diff" data-diff="4">Maître</button>
+                            <button class="diff-btn diff diff-gm" data-diff="5">Grand Maître</button>
                         </div>
                     </div>
 
