@@ -127,7 +127,7 @@ class ChessApp {
       
       // Show tagline with username
       const tagline = $('welcome-tagline');
-      if (tagline) tagline.textContent = `Bienvenue, ${name} !`;
+      if (tagline) tagline.textContent = `Bienvenue !`;
       
       // Adapt lobby for salon mode (silently force AI)
       if (this.salonMode) {
