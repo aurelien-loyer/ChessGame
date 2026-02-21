@@ -6,14 +6,14 @@
     <title>♛ Chess Arena</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="three.min.js"></script>
+    <script src="hero-3d.js"></script>
 </head>
 <body>
 
     <!-- ===== MODE SELECTION SCREEN ===== -->
     <div id="mode-select-screen" class="screen active">
-        <div class="ms-bg-particles" id="ms-particles"></div>
-        <div class="ms-bg-gradient"></div>
-
+        <canvas id="hero-canvas"></canvas>
         <div class="ms-wrapper">
             <!-- Header -->
             <div class="ms-hero">
