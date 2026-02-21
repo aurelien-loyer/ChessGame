@@ -1236,6 +1236,12 @@ body {
   justify-content: center;
   gap: 20px;
   padding: 16px;
+  animation: game-enter 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes game-enter {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .game-col {
@@ -1285,11 +1291,27 @@ body {
   background: var(--bg2);
   border: 2px solid transparent;
   border-radius: var(--r);
-  transition: 0.2s;
+  transition: border-color 0.3s, box-shadow 0.3s, background 0.3s;
+  box-shadow: var(--shadow-sm);
+}
+
+.player-row:nth-child(1) { animation: row-enter 0.5s 0.3s ease-out both; }
+.player-row:nth-child(3) { animation: row-enter 0.5s 0.1s ease-out both; }
+
+@keyframes row-enter {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 .player-row.active-turn {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim), var(--shadow-sm);
+  animation: turn-pulse 2s ease-in-out infinite;
+}
+
+@keyframes turn-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--accent-dim), var(--shadow-sm); }
+  50% { box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.08), var(--shadow-sm); }
 }
 
 .indicator {
@@ -1347,23 +1369,32 @@ body {
   font-family: 'JetBrains Mono', monospace;
   font-size: 20px;
   font-weight: 700;
-  background: var(--bg);
+  background: var(--bg3);
   padding: 5px 14px;
   border-radius: 6px;
   border: 1px solid var(--brd);
   min-width: 76px;
   text-align: center;
+  transition: all 0.3s;
+}
+
+.player-row.active-turn .timer {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent-hover);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 .timer.low-time {
-  color: var(--red);
-  border-color: var(--red);
-  animation: blink 1s infinite;
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+  animation: tick-danger 0.8s ease-in-out infinite;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+@keyframes tick-danger {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.04); }
 }
 
 .timer.hidden {
@@ -1444,6 +1475,13 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: var(--shadow-md);
+  animation: history-slide-in 0.5s 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes history-slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 .history-title {
@@ -1477,17 +1515,26 @@ body {
 .move-entry {
   display: flex;
   gap: 10px;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
 }
 
 .move-entry:last-child {
-  background: rgba(129, 182, 76, 0.1);
+  background: var(--accent-dim);
+  color: var(--accent);
+  animation: move-slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes move-slide-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 .move-number {
   color: var(--t3);
   min-width: 24px;
+  font-weight: 600;
 }
 
 
@@ -1507,10 +1554,19 @@ body {
   grid-template-rows: repeat(8, 1fr);
   width: var(--board-size, 640px);
   height: var(--board-size, 640px);
-  border: 2px solid rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.25),
+    0 8px 20px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
   overflow: hidden;
+  animation: board-drop 0.7s 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes board-drop {
+  from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* --- Board Labels --- */
@@ -1560,23 +1616,51 @@ body {
 }
 
 .square.selected {
-  background: rgba(255, 255, 80, 0.45) !important;
+  background: rgba(99, 102, 241, 0.5) !important;
+  animation: select-flash 0.2s ease-out;
+}
+
+@keyframes select-flash {
+  from { background: rgba(99, 102, 241, 0.85) !important; }
+  to   { background: rgba(99, 102, 241, 0.5) !important; }
 }
 
 .square.last-move {
-  box-shadow: inset 0 0 0 3px rgba(255, 255, 80, 0.3);
+  box-shadow: inset 0 0 0 3px rgba(99, 102, 241, 0.35);
+  background-color: color-mix(in srgb, var(--sq-light) 85%, #6366f1 15%) !important;
+}
+
+.square.dark.last-move {
+  background-color: color-mix(in srgb, var(--sq-dark) 85%, #6366f1 15%) !important;
 }
 
 .square.check-square {
-  background: rgba(217, 72, 72, 0.55) !important;
+  background: rgba(239, 68, 68, 0.6) !important;
+  animation: check-flash 0.5s ease-out, check-glow 1.5s 0.5s ease-in-out infinite;
+}
+
+@keyframes check-flash {
+  0%   { background: rgba(239, 68, 68, 1) !important; }
+  100% { background: rgba(239, 68, 68, 0.6) !important; }
+}
+
+@keyframes check-glow {
+  0%, 100% { box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.4); }
+  50%       { box-shadow: inset 0 0 40px rgba(239, 68, 68, 0.7); }
 }
 
 .square.check-attacker {
-  box-shadow: inset 0 0 0 3px rgba(224, 168, 48, 0.7), 0 0 16px rgba(224, 168, 48, 0.35);
+  box-shadow: inset 0 0 0 3px rgba(245, 158, 11, 0.8), 0 0 20px rgba(245, 158, 11, 0.4);
 }
 
 .square.check-attacker .piece {
-  filter: drop-shadow(0 0 10px rgba(224, 168, 48, 0.6));
+  filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.8));
+  animation: attacker-pulse 1s ease-in-out infinite;
+}
+
+@keyframes attacker-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 
 .square.has-piece {
@@ -1592,8 +1676,14 @@ body {
   position: absolute;
   width: 26%;
   height: 26%;
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(79, 70, 229, 0.35);
   border-radius: 50%;
+  animation: legal-dot-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes legal-dot-pop {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
 }
 
 .square.legal-capture::after {
@@ -1601,9 +1691,15 @@ body {
   position: absolute;
   width: 85%;
   height: 85%;
-  border: 5px solid rgba(217, 72, 72, 0.4);
+  border: 4px solid rgba(79, 70, 229, 0.5);
   border-radius: 50%;
   background: transparent;
+  animation: capture-ring-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes capture-ring-pop {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
 }
 
 /* --- Chess Pieces --- */
@@ -1611,6 +1707,24 @@ body {
   line-height: 1;
   pointer-events: none;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
+  transition: transform 0.1s ease, filter 0.1s ease;
+  display: inline-block;
+}
+
+.square.has-piece:hover .piece {
+  transform: scale(1.12) translateY(-2px);
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.35));
+}
+
+/* Piece placed animation */
+.piece.just-moved {
+  animation: piece-land 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes piece-land {
+  0%   { transform: scale(1.3) translateY(-8px); }
+  60%  { transform: scale(0.95) translateY(0); }
+  100% { transform: scale(1) translateY(0); }
 }
 
 .piece.white-piece {
@@ -1697,20 +1811,62 @@ body {
   max-width: 320px;
   background: var(--bg2);
   border: 2px solid var(--accent);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 16px rgba(129, 182, 76, 0.3);
-  animation: slideInRight 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.3),
+    0 0 30px var(--accent-dim);
+  animation: gameover-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(100px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+@keyframes gameover-bounce {
+  from { opacity: 0; transform: scale(0.6) translateY(40px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
+
+.go-icon {
+  font-size: 64px;
+  margin-bottom: 12px;
+  animation: icon-pop 0.8s 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  display: block;
+}
+
+@keyframes icon-pop {
+  from { transform: scale(0) rotate(-20deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.btn-main {
+  display: inline-block;
+  padding: 12px 28px;
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  border-radius: var(--r);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-main:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px var(--accent-dim);
+}
+
+.btn-main::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.25), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.5s;
+}
+
+.btn-main:hover::before { left: 150%; }
 
 /* --- Promotion Picker --- */
 .promo-row {

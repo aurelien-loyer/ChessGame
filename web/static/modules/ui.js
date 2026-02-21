@@ -141,18 +141,23 @@ export class UIManager {
         const pieceClass = 'piece ' + piece.color + '-piece';
         
         if (existingPiece && existingPiece.tagName === 'SPAN') {
-          // Reuse existing span
-          if (existingPiece.textContent !== symbol) {
+          // Reuse existing span — animate if piece symbol changed (a move landed here)
+          const symbolChanged = existingPiece.textContent !== symbol;
+          if (symbolChanged) {
             existingPiece.textContent = symbol;
+            // Trigger land animation
+            existingPiece.classList.remove('just-moved');
+            void existingPiece.offsetWidth; // reflow to restart animation
+            existingPiece.classList.add('just-moved');
           }
-          if (existingPiece.className !== pieceClass) {
+          if (existingPiece.className.replace(' just-moved', '') !== pieceClass) {
             existingPiece.className = pieceClass;
           }
         } else {
-          // Create new span only if needed
+          // Create new span — always animate on creation (piece just arrived)
           sq.innerHTML = '';
           const span = document.createElement('span');
-          span.className = pieceClass;
+          span.className = pieceClass + ' just-moved';
           span.textContent = symbol;
           sq.appendChild(span);
         }
