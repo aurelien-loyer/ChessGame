@@ -180,10 +180,7 @@ class HeroScene {
     }
 }
 
-// Initialize when DOM is ready
+// Initialize once the DOM is ready — the canvas is now fixed in <body>
 document.addEventListener('DOMContentLoaded', () => {
-    // Only init if we are on the landing page
-    if (document.querySelector('#mode-select-screen')) {
-        new HeroScene();
-    }
+    new HeroScene();
 });

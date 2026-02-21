@@ -11,9 +11,11 @@
 </head>
 <body>
 
+    <!-- ===== SHARED 3D BACKGROUND ===== -->
+    <canvas id="hero-canvas"></canvas>
+
     <!-- ===== MODE SELECTION SCREEN ===== -->
     <div id="mode-select-screen" class="screen active">
-        <canvas id="hero-canvas"></canvas>
         <div class="ms-wrapper">
             <!-- Header -->
             <div class="ms-hero">
@@ -53,19 +55,17 @@
 
     <!-- ===== WELCOME SCREEN ===== -->
     <div id="welcome-screen" class="screen">
-        <div class="welcome-background"></div>
-        <div class="welcome-box">
-            <div class="welcome-logo-anim">
-                <div class="king-crown">♔</div>
+        <div class="ms-wrapper welcome-wrapper">
+            <div class="ms-hero">
+                <div class="ms-hero-icon welcome-icon-anim">♔</div>
+                <h1 class="ms-title">Prêt à<br><span class="welcome-gradient">jouer ?</span></h1>
+                <p class="ms-subtitle">Entrez dans la légende.</p>
             </div>
-            
-            <h1 class="welcome-title">Prêt à jouer ?</h1>
-            <p class="welcome-sub">Entrez dans la légende.</p>
-            
             <button id="btn-enter" class="btn-play-pulse">
-                <span class="btn-text">JOUER</span>
-                <span class="btn-glow"></span>
+                <span class="btn-shimmer"></span>
+                JOUER
             </button>
+            <p class="ms-footer">Aucun compte requis · Jeu immédiat</p>
         </div>
     </div>
 
