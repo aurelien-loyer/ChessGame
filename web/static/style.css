@@ -107,93 +107,136 @@ body {
    2.5. WELCOME SCREEN
    ========================================================================= */
 
-.welcome-box {
-  text-align: center;
+/* --- Animated Background for Welcome Screen --- */
+.welcome-background {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  max-width: 420px;
-  padding: 24px;
-  animation: welcome-fadein 0.6s ease;
+  height: 100%;
+  z-index: 0;
+  background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f13 100%);
+  overflow: hidden;
 }
 
-@keyframes welcome-fadein {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
+.welcome-background::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232a2a3e' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  animation: bg-slide 60s linear infinite;
+  opacity: 0.3;
 }
 
-.welcome-logo {
+@keyframes bg-slide {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-50%, -50%); }
+}
+
+/* --- New Welcome Box --- */
+.welcome-box {
+  position: relative;
+  z-index: 10;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 4px;
-  margin-bottom: 16px;
+  text-align: center;
+  animation: fade-in-up 0.8s ease-out forwards;
 }
 
-.welcome-logo .logo-piece {
-  font-size: 56px;
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* animated crown */
+.king-crown {
+  font-size: 80px;
+  color: #fff;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+  animation: crown-float 3s ease-in-out infinite;
+  background: linear-gradient(135deg, #fff 0%, #ccc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes crown-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(2deg); }
 }
 
 .welcome-title {
-  font-size: 44px;
+  font-size: 3rem;
   font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  margin-bottom: 8px;
-}
-
-.welcome-title span {
-  color: var(--accent);
+  margin: 1rem 0 0.5rem;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
 
 .welcome-sub {
-  color: var(--t3);
-  font-size: 15px;
-  margin-bottom: 32px;
+  color: var(--t2);
+  font-size: 1.2rem;
+  margin-bottom: 3rem;
+  font-weight: 500;
 }
 
-.welcome-input-wrap {
-  margin-bottom: 20px;
+
+/* --- Pulsing Play Button --- */
+.btn-play-pulse {
+  position: relative;
+  padding: 1.2rem 4rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 30px rgba(79, 70, 229, 0.4);
+  letter-spacing: 3px;
+  text-transform: uppercase;
 }
 
-.welcome-input {
-  width: 100%;
-  padding: 16px 20px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 18px;
-  font-weight: 600;
-  text-align: center;
-  color: var(--t1);
-  background: var(--bg2);
-  border: 2px solid var(--brd);
-  border-radius: var(--r);
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  letter-spacing: 0.05em;
+.btn-play-pulse:hover {
+  transform: scale(1.05) translateY(-2px);
+  box-shadow: 0 15px 40px rgba(79, 70, 229, 0.6);
+  background: var(--accent-hover);
 }
 
-.welcome-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+.btn-play-pulse:active {
+  transform: scale(0.95);
 }
 
-.welcome-input::placeholder {
-  color: var(--t3);
-  font-weight: 400;
+.btn-glow {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 60%);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 0.6s, opacity 0.6s;
 }
 
-.welcome-input.shake {
-  animation: shake 0.4s ease;
+.btn-play-pulse:hover .btn-glow {
+  transform: scale(1);
+  opacity: 1;
+  animation: pulse-ring 2s infinite;
 }
 
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%      { transform: translateX(-8px); }
-  40%      { transform: translateX(8px); }
-  60%      { transform: translateX(-6px); }
-  80%      { transform: translateX(4px); }
-}
-
-.btn-enter {
-  width: 100%;
-  margin-top: 4px;
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
 }
 
 

@@ -108,25 +108,19 @@ class ChessApp {
    * Setup welcome screen
    */
   setupWelcomeScreen() {
-    const inputUsername = $('input-username');
     const btnEnter = $('btn-enter');
     
-    // Restore saved username
-    const saved = localStorage.getItem('chess_username');
-    if (saved) {
-      inputUsername.value = saved;
-    }
-
     const enterLobby = () => {
-      const name = inputUsername.value.trim();
+      // Auto-generate cool username if none stored
+      let name = localStorage.getItem('chess_username');
       if (!name) {
-        inputUsername.classList.add('shake');
-        inputUsername.focus();
-        setTimeout(() => inputUsername.classList.remove('shake'), 500);
-        return;
+          const adjs = ['Grand', 'Royal', 'Speedy', 'Silent', 'Golden', 'Silver', 'Iron', 'Mystic'];
+          const nouns = ['King', 'Rook', 'Knight', 'Pawn', 'Master', 'Legend', 'Ghost', 'Wolf'];
+          name = adjs[Math.floor(Math.random()*adjs.length)] + ' ' + nouns[Math.floor(Math.random()*nouns.length)];
+          localStorage.setItem('chess_username', name);
       }
+      
       this.username = name;
-      localStorage.setItem('chess_username', name);
       
       // Pass username to online game
       this.onlineGame.username = name;
@@ -150,12 +144,6 @@ class ChessApp {
     };
 
     btnEnter.addEventListener('click', enterLobby);
-    inputUsername.addEventListener('keydown', e => {
-      if (e.key === 'Enter') enterLobby();
-    });
-
-    // Auto-focus
-    setTimeout(() => inputUsername.focus(), 200);
   }
 
   /**
