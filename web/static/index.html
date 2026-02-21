@@ -11,25 +11,34 @@
 
     <!-- ===== MODE SELECTION SCREEN ===== -->
     <div id="mode-select-screen" class="screen active">
-        <div class="welcome-box">
-            <div class="welcome-logo">
-                <span class="logo-piece">♚</span>
-                <span class="logo-piece accent">♛</span>
+        <div class="ms-bg-particles" id="ms-particles"></div>
+        <div class="ms-container">
+            <div class="ms-header">
+                <div class="ms-logo">
+                    <span class="ms-crown">♛</span>
+                </div>
+                <h1 class="ms-title">Chess<span>Arena</span></h1>
+                <p class="ms-subtitle">Prêt à jouer ?</p>
             </div>
-            <h1 class="welcome-title">Chess<span>Arena</span></h1>
-            <p class="welcome-sub">Choisissez votre mode de jeu</p>
 
-            <div class="mode-select-cards">
-                <button id="btn-mode-basic" class="mode-select-card">
-                    <span class="mode-select-icon">⚔️</span>
-                    <span class="mode-select-title">Partie classique</span>
-                    <span class="mode-select-desc">Jouez en ligne ou contre l'IA, choisissez la cadence et le mode</span>
+            <div class="ms-cards">
+                <button id="btn-mode-basic" class="ms-card">
+                    <div class="ms-card-glow"></div>
+                    <div class="ms-card-icon">⚔️</div>
+                    <div class="ms-card-content">
+                        <span class="ms-card-title">Partie libre</span>
+                        <span class="ms-card-desc">Multijoueur en ligne, partie privée ou contre l'IA</span>
+                    </div>
+                    <span class="ms-card-arrow">→</span>
                 </button>
-                <button id="btn-mode-salon" class="mode-select-card mode-select-card-salon">
-                    <span class="mode-select-icon">🎪</span>
-                    <span class="mode-select-title">Mode Salon</span>
-                    <span class="mode-select-desc">Venez défier notre IA ! Idéal pour les événements et présentations</span>
-                    <span class="mode-select-badge">🎮 DÉMO</span>
+                <button id="btn-mode-salon" class="ms-card ms-card-accent">
+                    <div class="ms-card-glow"></div>
+                    <div class="ms-card-icon">🤖</div>
+                    <div class="ms-card-content">
+                        <span class="ms-card-title">Défi rapide</span>
+                        <span class="ms-card-desc">Lancez-vous directement contre l'intelligence artificielle</span>
+                    </div>
+                    <span class="ms-card-arrow">→</span>
                 </button>
             </div>
         </div>

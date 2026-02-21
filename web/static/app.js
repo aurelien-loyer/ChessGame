@@ -67,10 +67,30 @@ class ChessApp {
 
     btnSalon.addEventListener('click', () => {
       this.salonMode = true;
-      const subText = $('welcome-sub-text');
-      if (subText) subText.textContent = 'Entrez votre pseudo pour défier l\'IA !';
       this.transitionToWelcome();
     });
+
+    // Spawn floating chess piece particles
+    this.spawnParticles();
+  }
+
+  /**
+   * Spawn floating particles for mode selection background
+   */
+  spawnParticles() {
+    const container = $('ms-particles');
+    if (!container) return;
+    const pieces = ['♔','♕','♖','♗','♘','♙','♚','♛','♜','♝','♞','♟'];
+    for (let i = 0; i < 20; i++) {
+      const el = document.createElement('span');
+      el.className = 'ms-particle';
+      el.textContent = pieces[Math.floor(Math.random() * pieces.length)];
+      el.style.left = Math.random() * 100 + '%';
+      el.style.fontSize = (16 + Math.random() * 24) + 'px';
+      el.style.animationDuration = (12 + Math.random() * 18) + 's';
+      el.style.animationDelay = -(Math.random() * 20) + 's';
+      container.appendChild(el);
+    }
   }
 
   /**
@@ -113,15 +133,9 @@ class ChessApp {
       
       // Show tagline with username
       const tagline = $('welcome-tagline');
-      if (tagline) {
-        if (this.salonMode) {
-          tagline.textContent = `${name}, prêt à relever le défi ?`;
-        } else {
-          tagline.textContent = `Bienvenue, ${name} !`;
-        }
-      }
+      if (tagline) tagline.textContent = `Bienvenue, ${name} !`;
       
-      // Adapt lobby for salon mode
+      // Adapt lobby for salon mode (silently force AI)
       if (this.salonMode) {
         this.setupSalonLobby();
       } else {
@@ -211,36 +225,19 @@ class ChessApp {
   }
 
   /**
-   * Setup lobby for Salon (presentation) mode — AI only
+   * Setup lobby for salon mode — silently force AI only
    */
   setupSalonLobby() {
     // Force AI mode
     this.currentMode = 'ai';
     
-    // Hide mode switch (online/AI toggle)
+    // Hide mode switch so user can't switch to online
     const modeSwitch = document.querySelector('.mode-switch');
     if (modeSwitch) modeSwitch.classList.add('hidden');
     
     // Show AI actions, hide online actions
     $('online-actions').classList.add('hidden');
     $('ai-actions').classList.remove('hidden');
-    
-    // Add salon banner if not already present
-    let banner = $('salon-banner');
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.id = 'salon-banner';
-      banner.className = 'salon-banner';
-      banner.innerHTML = `
-        <span class="salon-banner-icon">🎪</span>
-        <div class="salon-banner-title">Mode Salon — Défiez l'IA !</div>
-        <div class="salon-banner-text">Choisissez votre difficulté et votre couleur, puis lancez la partie</div>
-      `;
-      const lobbyCard = $('lobby-content');
-      lobbyCard.insertBefore(banner, lobbyCard.firstChild);
-    } else {
-      banner.classList.remove('hidden');
-    }
   }
 
   /**
@@ -253,10 +250,6 @@ class ChessApp {
     // Reset to online mode
     this.currentMode = 'online';
     this.selectMode('online');
-    
-    // Hide salon banner
-    const banner = $('salon-banner');
-    if (banner) banner.classList.add('hidden');
   }
 
   /**

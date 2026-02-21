@@ -192,108 +192,195 @@ body {
 
 
 /* --- Mode Selection Screen --- */
-.mode-select-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 8px;
-}
 
-.mode-select-card {
+#mode-select-screen {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 28px 20px;
-  background: var(--bg2);
-  border: 2px solid var(--brd);
-  border-radius: var(--r-lg);
-  cursor: pointer;
-  transition: all 0.25s ease;
-  font-family: inherit;
-  color: var(--t1);
+  overflow: hidden;
+}
+
+.ms-bg-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ms-particle {
+  position: absolute;
+  font-size: 24px;
+  opacity: 0.07;
+  animation: ms-float linear infinite;
+  pointer-events: none;
+}
+
+@keyframes ms-float {
+  0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  10%  { opacity: 0.07; }
+  90%  { opacity: 0.07; }
+  100% { transform: translateY(-10vh) rotate(360deg); opacity: 0; }
+}
+
+.ms-container {
+  position: relative;
+  z-index: 1;
   text-align: center;
+  width: 100%;
+  max-width: 460px;
+  padding: 24px;
+  animation: ms-appear 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.mode-select-card:hover {
-  border-color: var(--accent);
-  background: var(--bg3);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+@keyframes ms-appear {
+  from { opacity: 0; transform: translateY(30px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.mode-select-card:active {
-  transform: translateY(0);
+.ms-header {
+  margin-bottom: 40px;
 }
 
-.mode-select-icon {
-  font-size: 40px;
-  line-height: 1;
-  margin-bottom: 4px;
+.ms-logo {
+  margin-bottom: 16px;
 }
 
-.mode-select-title {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.mode-select-desc {
-  font-size: 13px;
-  color: var(--t3);
-  line-height: 1.4;
-  max-width: 280px;
-}
-
-.mode-select-card-salon {
-  border-color: rgba(224, 168, 48, 0.25);
-  background: linear-gradient(135deg, var(--bg2), rgba(224, 168, 48, 0.06));
-}
-
-.mode-select-card-salon:hover {
-  border-color: var(--yellow);
-  box-shadow: 0 8px 24px rgba(224, 168, 48, 0.15);
-}
-
-.mode-select-badge {
+.ms-crown {
+  font-size: 64px;
   display: inline-block;
-  margin-top: 4px;
-  padding: 4px 12px;
-  font-size: 11px;
+  filter: drop-shadow(0 0 20px rgba(129, 182, 76, 0.4));
+  animation: ms-pulse 3s ease-in-out infinite;
+}
+
+@keyframes ms-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(129, 182, 76, 0.4)); }
+  50%      { transform: scale(1.05); filter: drop-shadow(0 0 30px rgba(129, 182, 76, 0.6)); }
+}
+
+.ms-title {
+  font-size: 48px;
   font-weight: 800;
-  letter-spacing: 0.08em;
-  color: #fff;
-  background: linear-gradient(135deg, var(--yellow), #e07830);
-  border-radius: 20px;
-}
-
-/* Salon lobby banner */
-.salon-banner {
-  background: linear-gradient(135deg, rgba(224, 168, 48, 0.12), rgba(224, 120, 48, 0.08));
-  border: 1px solid rgba(224, 168, 48, 0.25);
-  border-radius: var(--r);
-  padding: 16px 20px;
-  text-align: center;
-}
-
-.salon-banner-icon {
-  font-size: 32px;
-  display: block;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
   margin-bottom: 8px;
 }
 
-.salon-banner-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--yellow);
-  margin-bottom: 4px;
+.ms-title span {
+  color: var(--accent);
 }
 
-.salon-banner-text {
+.ms-subtitle {
+  color: var(--t3);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+/* --- Mode Cards --- */
+.ms-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ms-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 24px;
+  background: var(--bg2);
+  border: 1px solid var(--brd);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: inherit;
+  color: var(--t1);
+  text-align: left;
+  overflow: hidden;
+}
+
+.ms-card-glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.ms-card:first-child .ms-card-glow {
+  background: radial-gradient(ellipse at 20% 50%, rgba(129, 182, 76, 0.08) 0%, transparent 70%);
+}
+
+.ms-card-accent .ms-card-glow {
+  background: radial-gradient(ellipse at 20% 50%, rgba(99, 140, 255, 0.08) 0%, transparent 70%);
+}
+
+.ms-card:hover .ms-card-glow {
+  opacity: 1;
+}
+
+.ms-card:hover {
+  border-color: var(--accent);
+  transform: translateX(4px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(129, 182, 76, 0.1);
+}
+
+.ms-card-accent:hover {
+  border-color: #638cff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(99, 140, 255, 0.1);
+}
+
+.ms-card:active {
+  transform: translateX(2px) scale(0.99);
+}
+
+.ms-card-icon {
+  font-size: 36px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border-radius: 12px;
+}
+
+.ms-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-card-title {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+
+.ms-card-desc {
+  display: block;
   font-size: 13px;
-  color: var(--t2);
+  color: var(--t3);
   line-height: 1.4;
+}
+
+.ms-card-arrow {
+  font-size: 20px;
+  color: var(--t3);
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.ms-card:hover .ms-card-arrow {
+  color: var(--accent);
+  transform: translateX(4px);
+}
+
+.ms-card-accent:hover .ms-card-arrow {
+  color: #638cff;
 }
 
 
