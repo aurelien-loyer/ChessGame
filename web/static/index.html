@@ -12,35 +12,44 @@
     <!-- ===== MODE SELECTION SCREEN ===== -->
     <div id="mode-select-screen" class="screen active">
         <div class="ms-bg-particles" id="ms-particles"></div>
-        <div class="ms-container">
-            <div class="ms-header">
-                <div class="ms-logo">
-                    <span class="ms-crown">♛</span>
+        <div class="ms-bg-gradient"></div>
+
+        <div class="ms-wrapper">
+            <!-- Header -->
+            <div class="ms-hero">
+                <div class="ms-hero-pieces">
+                    <span class="ms-hero-piece ms-hero-w">♔</span>
+                    <span class="ms-hero-vs">VS</span>
+                    <span class="ms-hero-piece ms-hero-b">♚</span>
                 </div>
                 <h1 class="ms-title">Chess<span>Arena</span></h1>
-                <p class="ms-subtitle">Prêt à jouer ?</p>
+                <p class="ms-subtitle">L'échiquier n'attend que vous</p>
             </div>
 
+            <!-- Cards -->
             <div class="ms-cards">
-                <button id="btn-mode-basic" class="ms-card">
-                    <div class="ms-card-glow"></div>
-                    <div class="ms-card-icon">⚔️</div>
-                    <div class="ms-card-content">
+                <button id="btn-mode-basic" class="ms-card ms-card-green">
+                    <div class="ms-card-bg"></div>
+                    <div class="ms-card-body">
+                        <span class="ms-card-emoji">⚔️</span>
                         <span class="ms-card-title">Partie libre</span>
-                        <span class="ms-card-desc">Multijoueur en ligne, partie privée ou contre l'IA</span>
+                        <span class="ms-card-desc">Affrontez des joueurs en ligne, créez des salons privés ou défiez l'IA</span>
+                        <span class="ms-card-cta">Jouer <span class="ms-card-cta-arrow">→</span></span>
                     </div>
-                    <span class="ms-card-arrow">→</span>
                 </button>
-                <button id="btn-mode-salon" class="ms-card ms-card-accent">
-                    <div class="ms-card-glow"></div>
-                    <div class="ms-card-icon">🤖</div>
-                    <div class="ms-card-content">
+
+                <button id="btn-mode-salon" class="ms-card ms-card-blue">
+                    <div class="ms-card-bg"></div>
+                    <div class="ms-card-body">
+                        <span class="ms-card-emoji">🤖</span>
                         <span class="ms-card-title">Défi rapide</span>
-                        <span class="ms-card-desc">Lancez-vous directement contre l'intelligence artificielle</span>
+                        <span class="ms-card-desc">Lancez-vous directement dans une partie contre notre intelligence artificielle</span>
+                        <span class="ms-card-cta">Défier l'IA <span class="ms-card-cta-arrow">→</span></span>
                     </div>
-                    <span class="ms-card-arrow">→</span>
                 </button>
             </div>
+
+            <p class="ms-footer">♟ Gratuit · Aucun compte requis · Jouez en 10 secondes</p>
         </div>
     </div>
 
