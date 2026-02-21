@@ -33,8 +33,10 @@ class ChessApp {
     this.currentMode = 'online';
     this.selectedTime = 300;
     this.username = null;
+    this.salonMode = false;
     
     // DOM References
+    this.modeSelectScreen = $('mode-select-screen');
     this.welcomeScreen = $('welcome-screen');
     this.lobbyScreen = $('lobby');
     this.gameScreen = $('game');
@@ -45,9 +47,41 @@ class ChessApp {
     this.inputRoom = $('input-room');
     
     // Initialize
+    this.setupModeSelectScreen();
     this.setupWelcomeScreen();
     this.setupEventListeners();
     this.setupGameCallbacks();
+  }
+
+  /**
+   * Setup mode selection screen
+   */
+  setupModeSelectScreen() {
+    const btnBasic = $('btn-mode-basic');
+    const btnSalon = $('btn-mode-salon');
+
+    btnBasic.addEventListener('click', () => {
+      this.salonMode = false;
+      this.transitionToWelcome();
+    });
+
+    btnSalon.addEventListener('click', () => {
+      this.salonMode = true;
+      const subText = $('welcome-sub-text');
+      if (subText) subText.textContent = 'Entrez votre pseudo pour défier l\'IA !';
+      this.transitionToWelcome();
+    });
+  }
+
+  /**
+   * Transition from mode select to welcome screen
+   */
+  transitionToWelcome() {
+    hide(this.modeSelectScreen);
+    this.modeSelectScreen.classList.remove('active');
+    show(this.welcomeScreen);
+    this.welcomeScreen.classList.add('active');
+    setTimeout(() => $('input-username').focus(), 200);
   }
 
   /**
@@ -79,7 +113,20 @@ class ChessApp {
       
       // Show tagline with username
       const tagline = $('welcome-tagline');
-      if (tagline) tagline.textContent = `Bienvenue, ${name} !`;
+      if (tagline) {
+        if (this.salonMode) {
+          tagline.textContent = `${name}, prêt à relever le défi ?`;
+        } else {
+          tagline.textContent = `Bienvenue, ${name} !`;
+        }
+      }
+      
+      // Adapt lobby for salon mode
+      if (this.salonMode) {
+        this.setupSalonLobby();
+      } else {
+        this.resetLobbyToNormal();
+      }
       
       // Transition
       hide(this.welcomeScreen);
@@ -161,6 +208,55 @@ class ChessApp {
     this.offlineGame.onGameEnd = () => {
       console.log('[App] Offline game ended');
     };
+  }
+
+  /**
+   * Setup lobby for Salon (presentation) mode — AI only
+   */
+  setupSalonLobby() {
+    // Force AI mode
+    this.currentMode = 'ai';
+    
+    // Hide mode switch (online/AI toggle)
+    const modeSwitch = document.querySelector('.mode-switch');
+    if (modeSwitch) modeSwitch.classList.add('hidden');
+    
+    // Show AI actions, hide online actions
+    $('online-actions').classList.add('hidden');
+    $('ai-actions').classList.remove('hidden');
+    
+    // Add salon banner if not already present
+    let banner = $('salon-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'salon-banner';
+      banner.className = 'salon-banner';
+      banner.innerHTML = `
+        <span class="salon-banner-icon">🎪</span>
+        <div class="salon-banner-title">Mode Salon — Défiez l'IA !</div>
+        <div class="salon-banner-text">Choisissez votre difficulté et votre couleur, puis lancez la partie</div>
+      `;
+      const lobbyCard = $('lobby-content');
+      lobbyCard.insertBefore(banner, lobbyCard.firstChild);
+    } else {
+      banner.classList.remove('hidden');
+    }
+  }
+
+  /**
+   * Reset lobby to normal mode (all options visible)
+   */
+  resetLobbyToNormal() {
+    const modeSwitch = document.querySelector('.mode-switch');
+    if (modeSwitch) modeSwitch.classList.remove('hidden');
+    
+    // Reset to online mode
+    this.currentMode = 'online';
+    this.selectMode('online');
+    
+    // Hide salon banner
+    const banner = $('salon-banner');
+    if (banner) banner.classList.add('hidden');
   }
 
   /**
@@ -338,8 +434,16 @@ class ChessApp {
     // Reset UI
     hide(this.gameScreen);
     this.gameScreen.classList.remove('active');
-    show(this.lobbyScreen);
-    this.lobbyScreen.classList.add('active');
+    
+    // In salon mode, go back to lobby (keep playing)
+    // In normal mode, go back to mode selection
+    if (this.salonMode) {
+      show(this.lobbyScreen);
+      this.lobbyScreen.classList.add('active');
+    } else {
+      show(this.lobbyScreen);
+      this.lobbyScreen.classList.add('active');
+    }
     
     hide(this.waitingPanel);
     hide(this.matchmakingPanel);

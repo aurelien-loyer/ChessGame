@@ -9,15 +9,41 @@
 </head>
 <body>
 
-    <!-- ===== WELCOME SCREEN ===== -->
-    <div id="welcome-screen" class="screen active">
+    <!-- ===== MODE SELECTION SCREEN ===== -->
+    <div id="mode-select-screen" class="screen active">
         <div class="welcome-box">
             <div class="welcome-logo">
                 <span class="logo-piece">♚</span>
                 <span class="logo-piece accent">♛</span>
             </div>
             <h1 class="welcome-title">Chess<span>Arena</span></h1>
-            <p class="welcome-sub">Choisissez votre pseudo</p>
+            <p class="welcome-sub">Choisissez votre mode de jeu</p>
+
+            <div class="mode-select-cards">
+                <button id="btn-mode-basic" class="mode-select-card">
+                    <span class="mode-select-icon">⚔️</span>
+                    <span class="mode-select-title">Partie classique</span>
+                    <span class="mode-select-desc">Jouez en ligne ou contre l'IA, choisissez la cadence et le mode</span>
+                </button>
+                <button id="btn-mode-salon" class="mode-select-card mode-select-card-salon">
+                    <span class="mode-select-icon">🎪</span>
+                    <span class="mode-select-title">Mode Salon</span>
+                    <span class="mode-select-desc">Venez défier notre IA ! Idéal pour les événements et présentations</span>
+                    <span class="mode-select-badge">🎮 DÉMO</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== WELCOME SCREEN ===== -->
+    <div id="welcome-screen" class="screen">
+        <div class="welcome-box">
+            <div class="welcome-logo">
+                <span class="logo-piece">♚</span>
+                <span class="logo-piece accent">♛</span>
+            </div>
+            <h1 class="welcome-title">Chess<span>Arena</span></h1>
+            <p class="welcome-sub" id="welcome-sub-text">Choisissez votre pseudo</p>
             <div class="welcome-input-wrap">
                 <input type="text" id="input-username" class="welcome-input" placeholder="Votre pseudo…" maxlength="20" autocomplete="off" spellcheck="false">
             </div>

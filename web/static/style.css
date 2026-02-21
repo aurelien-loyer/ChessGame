@@ -191,6 +191,112 @@ body {
 }
 
 
+/* --- Mode Selection Screen --- */
+.mode-select-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.mode-select-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 20px;
+  background: var(--bg2);
+  border: 2px solid var(--brd);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-family: inherit;
+  color: var(--t1);
+  text-align: center;
+}
+
+.mode-select-card:hover {
+  border-color: var(--accent);
+  background: var(--bg3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.mode-select-card:active {
+  transform: translateY(0);
+}
+
+.mode-select-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.mode-select-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.mode-select-desc {
+  font-size: 13px;
+  color: var(--t3);
+  line-height: 1.4;
+  max-width: 280px;
+}
+
+.mode-select-card-salon {
+  border-color: rgba(224, 168, 48, 0.25);
+  background: linear-gradient(135deg, var(--bg2), rgba(224, 168, 48, 0.06));
+}
+
+.mode-select-card-salon:hover {
+  border-color: var(--yellow);
+  box-shadow: 0 8px 24px rgba(224, 168, 48, 0.15);
+}
+
+.mode-select-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--yellow), #e07830);
+  border-radius: 20px;
+}
+
+/* Salon lobby banner */
+.salon-banner {
+  background: linear-gradient(135deg, rgba(224, 168, 48, 0.12), rgba(224, 120, 48, 0.08));
+  border: 1px solid rgba(224, 168, 48, 0.25);
+  border-radius: var(--r);
+  padding: 16px 20px;
+  text-align: center;
+}
+
+.salon-banner-icon {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.salon-banner-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--yellow);
+  margin-bottom: 4px;
+}
+
+.salon-banner-text {
+  font-size: 13px;
+  color: var(--t2);
+  line-height: 1.4;
+}
+
+
 /* =========================================================================
    3. LOBBY INTERFACE
    ========================================================================= */
