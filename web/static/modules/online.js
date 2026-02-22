@@ -371,13 +371,8 @@ export class OnlineGame {
         if (this._gameInProgress && !this.engine.gameOver) {
           this._showBanner('Adversaire déconnecté — en attente…', 'warning');
           // They have 120s to reconnect (server-side timeout)
-        } else {
-          this.engine.gameOver = true;
-          this.engine.result = 'disconnect';
-          this.engine.winner = this.myColor;
-          this.stopTimer();
-          this.showGameOver();
         }
+        // If game is already over, ignore — no fake "disconnect victory"
         break;
 
       case 'opponent_disconnected_final':
@@ -390,6 +385,7 @@ export class OnlineGame {
           this.stopTimer();
           this.showGameOver();
         }
+        // If game already over, ignore
         break;
 
       case 'timeout':

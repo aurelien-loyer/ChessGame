@@ -853,58 +853,79 @@ async def websocket_handler(request):
         cleanup_room = current_room or find_room_for_ws(ws)
         if cleanup_room and cleanup_room.started:
             current_room = cleanup_room
-            # Game in progress — don't destroy room, allow reconnection
-            opponent = cleanup_room.get_opponent(ws)
-            if opponent and not opponent.closed:
-                try:
-                    await opponent.send_json({
-                        "type": "opponent_disconnected"
-                    })
-                except Exception:
-                    pass
+
+            if cleanup_room.game_over:
+                # Game already finished — clean up silently, no "disconnect" message
+                opponent = cleanup_room.get_opponent(ws)
+                # Just clean up player_rooms
+                if disconnecting_username:
+                    player_rooms.pop(disconnecting_username, None)
+                # If both players are gone, remove the room
+                all_gone = True
+                for p_ws in list(cleanup_room.players.keys()):
+                    if p_ws != ws and not p_ws.closed:
+                        all_gone = False
+                        break
+                if all_gone:
+                    for p_ws in list(cleanup_room.players.keys()):
+                        pname = get_username_for_ws(p_ws)
+                        if pname:
+                            player_rooms.pop(pname, None)
+                    rooms.pop(cleanup_room.room_id, None)
+            else:
+                # Game in progress — don't destroy room, allow reconnection
+                opponent = cleanup_room.get_opponent(ws)
+                if opponent and not opponent.closed:
+                    try:
+                        await opponent.send_json({
+                            "type": "opponent_disconnected"
+                        })
+                    except Exception:
+                        pass
 
             # Schedule room cleanup after 120s if player doesn't reconnect
-            room_id = cleanup_room.room_id
-            disconnected_color = cleanup_room.get_color(ws)
-            disconnected_user = disconnecting_username
+            if not cleanup_room.game_over:
+                room_id = cleanup_room.room_id
+                disconnected_color = cleanup_room.get_color(ws)
+                disconnected_user = disconnecting_username
 
-            async def _delayed_cleanup():
-                await asyncio.sleep(120)
-                if room_id in rooms:
-                    room = rooms[room_id]
-                    # Check if the disconnected player is still gone
-                    still_gone = True
-                    for p_ws, p_color in room.players.items():
-                        if p_color == disconnected_color and not p_ws.closed:
-                            still_gone = False
-                            break
-                    if still_gone:
-                        # Record disconnect as a loss for the disconnecter
-                        if not room.game_over:
-                            winner_color = "black" if disconnected_color == "white" else "white"
-                            room.record_result(winner_color)
+                async def _delayed_cleanup():
+                    await asyncio.sleep(120)
+                    if room_id in rooms:
+                        room = rooms[room_id]
+                        # Check if the disconnected player is still gone
+                        still_gone = True
+                        for p_ws, p_color in room.players.items():
+                            if p_color == disconnected_color and not p_ws.closed:
+                                still_gone = False
+                                break
+                        if still_gone:
+                            # Record disconnect as a loss for the disconnecter
+                            if not room.game_over:
+                                winner_color = "black" if disconnected_color == "white" else "white"
+                                room.record_result(winner_color)
 
-                        # Notify remaining player
-                        for p_ws in list(room.players.keys()):
-                            if not p_ws.closed:
-                                try:
-                                    await p_ws.send_json({
-                                        "type": "opponent_disconnected_final"
-                                    })
-                                except Exception:
-                                    pass
+                            # Notify remaining player
+                            for p_ws in list(room.players.keys()):
+                                if not p_ws.closed:
+                                    try:
+                                        await p_ws.send_json({
+                                            "type": "opponent_disconnected_final"
+                                        })
+                                    except Exception:
+                                        pass
 
-                        # Clean up player_rooms for all players in this room
-                        for p_ws in list(room.players.keys()):
-                            pname = get_username_for_ws(p_ws)
-                            if pname:
-                                player_rooms.pop(pname, None)
-                        if disconnected_user:
-                            player_rooms.pop(disconnected_user, None)
+                            # Clean up player_rooms for all players in this room
+                            for p_ws in list(room.players.keys()):
+                                pname = get_username_for_ws(p_ws)
+                                if pname:
+                                    player_rooms.pop(pname, None)
+                            if disconnected_user:
+                                player_rooms.pop(disconnected_user, None)
 
-                        rooms.pop(room_id, None)
+                            rooms.pop(room_id, None)
 
-            asyncio.ensure_future(_delayed_cleanup())
+                asyncio.ensure_future(_delayed_cleanup())
 
         elif cleanup_room:
             # Game not started — clean up immediately
