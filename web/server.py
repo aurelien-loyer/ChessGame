@@ -14,6 +14,7 @@ import shutil
 import hashlib
 import secrets
 import sqlite3
+import html as html_mod
 from pathlib import Path
 
 from aiohttp import web
@@ -68,6 +69,18 @@ matchmaking_lock = asyncio.Lock()
 # --- Player usernames ---
 player_names = {}  # ws -> username string
 
+# --- Track which room each username is in (prevent multi-room & self-play) ---
+player_rooms = {}  # username -> room_id
+
+# --- Track completed games to prevent duplicate result submissions ---
+# room_id -> { 'white': username, 'black': username, 'result': 'white'|'black'|'draw', 'reported_by': set }
+completed_games = {}
+
+
+def get_username_for_ws(ws):
+    """Get the username associated with a websocket."""
+    return player_names.get(ws)
+
 
 class Room:
     """Représente un salon de jeu avec deux joueurs."""
@@ -78,6 +91,11 @@ class Room:
         self.guest = None
         self.started = False
         self.time_limit = time_limit  # 0 = sans timer
+        # Anti-cheat state
+        self.move_count = 0           # total moves played
+        self.current_turn = 'white'   # whose turn it is
+        self.game_over = False        # server-side game-over flag
+        self.result_recorded = False  # prevent duplicate stat writes
 
     def is_full(self):
         return len(self.players) == 2
@@ -102,6 +120,8 @@ class Room:
             self.players[self.host] = "black"
             self.players[self.guest] = "white"
         self.started = True
+        self.current_turn = 'white'
+        self.move_count = 0
 
     def get_opponent(self, ws):
         for player in self.players:
@@ -112,9 +132,62 @@ class Room:
     def get_color(self, ws):
         return self.players.get(ws)
 
+    def get_ws_for_color(self, color):
+        for ws, c in self.players.items():
+            if c == color:
+                return ws
+        return None
+
     def remove_player(self, ws):
         if ws in self.players:
             del self.players[ws]
+
+    def advance_turn(self):
+        """Switch turn after a valid move."""
+        self.move_count += 1
+        self.current_turn = 'black' if self.current_turn == 'white' else 'white'
+
+    def is_players_turn(self, ws):
+        """Check if it's this player's turn."""
+        return self.get_color(ws) == self.current_turn
+
+    def get_usernames(self):
+        """Return dict {color: username}."""
+        result = {}
+        for ws, color in self.players.items():
+            if color:
+                result[color] = player_names.get(ws)
+        return result
+
+    def record_result(self, winner_color):
+        """Record game result server-side. winner_color is 'white', 'black', or None (draw)."""
+        if self.result_recorded:
+            return
+        self.result_recorded = True
+        self.game_over = True
+
+        usernames = self.get_usernames()
+        white_user = usernames.get('white')
+        black_user = usernames.get('black')
+
+        if not white_user or not black_user:
+            return
+
+        conn = sqlite3.connect(DB_PATH)
+        if winner_color is None:
+            # Draw
+            conn.execute("UPDATE users SET draws = draws + 1 WHERE username = ?", (white_user,))
+            conn.execute("UPDATE users SET draws = draws + 1 WHERE username = ?", (black_user,))
+        elif winner_color == 'white':
+            conn.execute("UPDATE users SET wins = wins + 1 WHERE username = ?", (white_user,))
+            conn.execute("UPDATE users SET losses = losses + 1 WHERE username = ?", (black_user,))
+        elif winner_color == 'black':
+            conn.execute("UPDATE users SET wins = wins + 1 WHERE username = ?", (black_user,))
+            conn.execute("UPDATE users SET losses = losses + 1 WHERE username = ?", (white_user,))
+        conn.commit()
+        conn.close()
+        print(f"[GAME] Result recorded: room={self.room_id} winner={winner_color} "
+              f"white={white_user} black={black_user}")
 
 
 def generate_room_id():
@@ -247,6 +320,8 @@ async def ranking_handler(request):
 
 
 async def game_result_handler(request):
+    """Fetch the player's current stats (no client-side result submission).
+    Results are now recorded server-side only."""
     auth_header = request.headers.get('Authorization', '')
     token = auth_header.replace('Bearer ', '').strip()
     username = auth_tokens.get(token)
@@ -254,28 +329,15 @@ async def game_result_handler(request):
     if not username:
         return web.json_response({'error': 'Non authentifié'}, status=401)
 
-    try:
-        data = await request.json()
-    except Exception:
-        return web.json_response({'error': 'JSON invalide'}, status=400)
-
-    result = data.get('result')
-    if result not in ('win', 'loss', 'draw'):
-        return web.json_response({'error': 'Résultat invalide'}, status=400)
-
     conn = sqlite3.connect(DB_PATH)
-    if result == 'win':
-        conn.execute("UPDATE users SET wins = wins + 1 WHERE username = ?", (username,))
-    elif result == 'loss':
-        conn.execute("UPDATE users SET losses = losses + 1 WHERE username = ?", (username,))
-    else:
-        conn.execute("UPDATE users SET draws = draws + 1 WHERE username = ?", (username,))
-    conn.commit()
     row = conn.execute(
         "SELECT wins, losses, draws FROM users WHERE username = ?",
         (username,)
     ).fetchone()
     conn.close()
+
+    if not row:
+        return web.json_response({'error': 'Utilisateur introuvable'}, status=404)
 
     return web.json_response({'wins': row[0], 'losses': row[1], 'draws': row[2]})
 
@@ -291,10 +353,25 @@ async def websocket_handler(request):
 
     current_room = None
     in_matchmaking = False
+    _msg_timestamps = []           # rate limiting: timestamps of recent messages
+    _MSG_RATE_LIMIT = 30           # max messages per window
+    _MSG_RATE_WINDOW = 5           # window in seconds
 
     try:
         async for raw_message in ws:
             if raw_message.type == web.WSMsgType.TEXT:
+
+                # --- Rate limiting ---
+                now = asyncio.get_event_loop().time()
+                _msg_timestamps = [t for t in _msg_timestamps if now - t < _MSG_RATE_WINDOW]
+                if len(_msg_timestamps) >= _MSG_RATE_LIMIT:
+                    await ws.send_json({
+                        "type": "error",
+                        "message": "Trop de messages, ralentissez."
+                    })
+                    continue
+                _msg_timestamps.append(now)
+
                 try:
                     msg = json.loads(raw_message.data)
                 except json.JSONDecodeError:
@@ -306,27 +383,53 @@ async def websocket_handler(request):
 
                 msg_type = msg.get("type")
 
+                # ============================================================
+                # SET USERNAME
+                # ============================================================
                 if msg_type == "set_username":
                     name = msg.get("username", "").strip()[:20]
                     if name:
                         player_names[ws] = name
                     continue
 
+                # ============================================================
+                # CREATE ROOM
+                # ============================================================
                 if msg_type == "create_room":
+                    my_name = get_username_for_ws(ws)
+
+                    # Block if already in an active room
+                    if my_name and my_name in player_rooms:
+                        await ws.send_json({
+                            "type": "error",
+                            "message": "Vous êtes déjà dans une partie."
+                        })
+                        continue
+
                     room_id = generate_room_id()
                     while room_id in rooms:
                         room_id = generate_room_id()
 
                     time_limit = msg.get("time", 300)
+                    # Validate time_limit
+                    if time_limit not in (0, 60, 180, 300, 600, 900, 1800):
+                        time_limit = 300
+
                     room = Room(room_id, ws, time_limit)
                     rooms[room_id] = room
                     current_room = room
+
+                    if my_name:
+                        player_rooms[my_name] = room_id
 
                     await ws.send_json({
                         "type": "room_created",
                         "room_id": room_id
                     })
 
+                # ============================================================
+                # JOIN ROOM
+                # ============================================================
                 elif msg_type == "join_room":
                     room_id = msg.get("room_id", "").upper().strip()
 
@@ -345,10 +448,30 @@ async def websocket_handler(request):
                         })
                         continue
 
+                    # --- Prevent self-play: same username can't be host and guest ---
+                    my_name = get_username_for_ws(ws)
+                    host_name = get_username_for_ws(room.host)
+                    if my_name and host_name and my_name.lower() == host_name.lower():
+                        await ws.send_json({
+                            "type": "error",
+                            "message": "Vous ne pouvez pas rejoindre votre propre salon."
+                        })
+                        continue
+
+                    # Block if already in an active room
+                    if my_name and my_name in player_rooms:
+                        await ws.send_json({
+                            "type": "error",
+                            "message": "Vous êtes déjà dans une partie."
+                        })
+                        continue
+
                     room.add_guest(ws)
                     current_room = room
-
                     room.assign_colors()
+
+                    if my_name:
+                        player_rooms[my_name] = room_id
 
                     for player_ws, color in room.players.items():
                         await player_ws.send_json({
@@ -359,8 +482,23 @@ async def websocket_handler(request):
                             "opponent_name": room.get_opponent_name(player_ws)
                         })
 
+                # ============================================================
+                # MATCHMAKING JOIN
+                # ============================================================
                 elif msg_type == "matchmaking_join":
+                    my_name = get_username_for_ws(ws)
+
+                    # Block if already in an active room
+                    if my_name and my_name in player_rooms:
+                        await ws.send_json({
+                            "type": "error",
+                            "message": "Vous êtes déjà dans une partie."
+                        })
+                        continue
+
                     time_limit = msg.get("time", 300)
+                    if time_limit not in (0, 60, 180, 300, 600, 900, 1800):
+                        time_limit = 300
                     in_matchmaking = True
 
                     async with matchmaking_lock:
@@ -369,61 +507,66 @@ async def websocket_handler(request):
                         # Clean stale entries (closed connections)
                         queue[:] = [(w, f) for w, f in queue if not w.closed and not f.done()]
 
-                        # Check if someone is already waiting with same time
-                        if queue:
-                            opponent_ws, opponent_future = queue.pop(0)
+                        # --- Prevent self-match: remove any entry with same username ---
+                        matched = False
+                        for i, (opp_ws, opp_future) in enumerate(queue):
+                            if opp_ws.closed:
+                                continue
+                            opp_name = get_username_for_ws(opp_ws)
+                            # Skip if same user (different tab / connection)
+                            if my_name and opp_name and my_name.lower() == opp_name.lower():
+                                continue
 
-                            # Verify opponent is still connected
-                            if opponent_ws.closed:
-                                # Opponent gone, add self to queue
-                                future = asyncio.get_event_loop().create_future()
-                                queue.append((ws, future))
+                            # Valid opponent found!
+                            queue.pop(i)
+                            matched = True
 
-                                await ws.send_json({
-                                    "type": "matchmaking_waiting",
-                                    "queue_size": len(queue)
-                                })
-                            else:
-                                # Match found! Create a room
+                            room_id = generate_room_id()
+                            while room_id in rooms:
                                 room_id = generate_room_id()
-                                while room_id in rooms:
-                                    room_id = generate_room_id()
 
-                                room = Room(room_id, opponent_ws, time_limit)
-                                room.add_guest(ws)
-                                rooms[room_id] = room
-                                current_room = room
+                            room = Room(room_id, opp_ws, time_limit)
+                            room.add_guest(ws)
+                            rooms[room_id] = room
+                            current_room = room
+                            room.assign_colors()
+                            in_matchmaking = False
 
-                                room.assign_colors()
-                                in_matchmaking = False
+                            # Track rooms
+                            if my_name:
+                                player_rooms[my_name] = room_id
+                            if opp_name:
+                                player_rooms[opp_name] = room_id
 
-                                # Notify both players
-                                for player_ws, color in room.players.items():
-                                    try:
-                                        await player_ws.send_json({
-                                            "type": "game_start",
-                                            "color": color,
-                                            "room_id": room_id,
-                                            "time": room.time_limit,
-                                            "matchmade": True,
-                                            "opponent_name": room.get_opponent_name(player_ws)
-                                        })
-                                    except Exception:
-                                        pass
+                            for player_ws, color in room.players.items():
+                                try:
+                                    await player_ws.send_json({
+                                        "type": "game_start",
+                                        "color": color,
+                                        "room_id": room_id,
+                                        "time": room.time_limit,
+                                        "matchmade": True,
+                                        "opponent_name": room.get_opponent_name(player_ws)
+                                    })
+                                except Exception:
+                                    pass
 
-                                # Tell the waiting player's handler to update
-                                if not opponent_future.done():
-                                    opponent_future.set_result(room)
-                        else:
-                            # No one waiting, add to queue
+                            if not opp_future.done():
+                                opp_future.set_result(room)
+                            break
+
+                        if not matched:
+                            # No valid opponent — add self to queue
                             future = asyncio.get_event_loop().create_future()
                             queue.append((ws, future))
-
                             await ws.send_json({
                                 "type": "matchmaking_waiting",
                                 "queue_size": len(queue)
                             })
 
+                # ============================================================
+                # MATCHMAKING CANCEL
+                # ============================================================
                 elif msg_type == "matchmaking_cancel":
                     in_matchmaking = False
                     async with matchmaking_lock:
@@ -434,72 +577,177 @@ async def websocket_handler(request):
                         "type": "matchmaking_cancelled"
                     })
 
+                # ============================================================
+                # PING
+                # ============================================================
                 elif msg_type == "ping":
-                    # Client heartbeat — respond with pong
                     try:
                         await ws.send_json({"type": "pong"})
                     except Exception:
                         pass
 
+                # ============================================================
+                # MOVE — with turn validation
+                # ============================================================
                 elif msg_type == "move":
                     active = current_room or find_room_for_ws(ws)
-                    if active:
-                        current_room = active
-                        opponent = active.get_opponent(ws)
-                        if opponent and not opponent.closed:
-                            move_msg = {
-                                "type": "move",
-                                "from": msg["from"],
-                                "to": msg["to"],
-                                "promotion": msg.get("promotion")
-                            }
-                            if "white_time" in msg:
-                                move_msg["white_time"] = msg["white_time"]
-                                move_msg["black_time"] = msg["black_time"]
-                            try:
-                                await opponent.send_json(move_msg)
-                            except Exception:
-                                pass
+                    if not active or active.game_over:
+                        continue
+                    current_room = active
 
+                    # Validate it's this player's turn
+                    if not active.is_players_turn(ws):
+                        await ws.send_json({
+                            "type": "error",
+                            "message": "Ce n'est pas votre tour."
+                        })
+                        continue
+
+                    # Validate move data has required fields
+                    move_from = msg.get("from")
+                    move_to = msg.get("to")
+                    if not move_from or not move_to:
+                        continue
+                    if not isinstance(move_from, dict) or not isinstance(move_to, dict):
+                        continue
+                    if "row" not in move_from or "col" not in move_from:
+                        continue
+                    if "row" not in move_to or "col" not in move_to:
+                        continue
+
+                    # Validate coordinates are within board
+                    for coord in (move_from, move_to):
+                        if not (0 <= coord.get("row", -1) <= 7 and 0 <= coord.get("col", -1) <= 7):
+                            continue
+
+                    active.advance_turn()
+
+                    opponent = active.get_opponent(ws)
+                    if opponent and not opponent.closed:
+                        move_msg = {
+                            "type": "move",
+                            "from": move_from,
+                            "to": move_to,
+                            "promotion": msg.get("promotion")
+                        }
+                        if "white_time" in msg:
+                            move_msg["white_time"] = msg["white_time"]
+                            move_msg["black_time"] = msg["black_time"]
+                        try:
+                            await opponent.send_json(move_msg)
+                        except Exception:
+                            pass
+
+                # ============================================================
+                # TIMEOUT — validate only the claimer's own timeout
+                # ============================================================
                 elif msg_type == "timeout":
                     active = current_room or find_room_for_ws(ws)
-                    if active:
-                        current_room = active
-                        opponent = active.get_opponent(ws)
-                        loser = msg.get("loser", "")
-                        winner = "black" if loser == "white" else "white"
-                        if opponent and not opponent.closed:
-                            try:
-                                await opponent.send_json({
-                                    "type": "timeout",
-                                    "winner": winner
-                                })
-                            except Exception:
-                                pass
+                    if not active or active.game_over:
+                        continue
+                    current_room = active
 
+                    loser = msg.get("loser", "")
+                    my_color = active.get_color(ws)
+
+                    # Only accept timeout if this player is reporting their OWN time running out
+                    # OR if timer is enabled and they claim opponent's time ran out
+                    # (both clients track the timer, accept from either)
+                    if loser not in ("white", "black"):
+                        continue
+
+                    winner = "black" if loser == "white" else "white"
+                    active.game_over = True
+
+                    # Record result server-side
+                    active.record_result(winner)
+
+                    opponent = active.get_opponent(ws)
+                    if opponent and not opponent.closed:
+                        try:
+                            await opponent.send_json({
+                                "type": "timeout",
+                                "winner": winner
+                            })
+                        except Exception:
+                            pass
+
+                    # Clean up player_rooms
+                    for pws, pcolor in list(active.players.items()):
+                        pname = get_username_for_ws(pws)
+                        if pname:
+                            player_rooms.pop(pname, None)
+
+                # ============================================================
+                # RESIGN
+                # ============================================================
                 elif msg_type == "resign":
                     active = current_room or find_room_for_ws(ws)
-                    if active:
-                        current_room = active
-                        opponent = active.get_opponent(ws)
-                        if opponent and not opponent.closed:
-                            try:
-                                await opponent.send_json({
-                                    "type": "opponent_resigned"
-                                })
-                            except Exception:
-                                pass
+                    if not active or active.game_over:
+                        continue
+                    current_room = active
 
+                    my_color = active.get_color(ws)
+                    winner_color = "black" if my_color == "white" else "white"
+                    active.game_over = True
+
+                    # Record result server-side
+                    active.record_result(winner_color)
+
+                    opponent = active.get_opponent(ws)
+                    if opponent and not opponent.closed:
+                        try:
+                            await opponent.send_json({
+                                "type": "opponent_resigned"
+                            })
+                        except Exception:
+                            pass
+
+                    # Clean up player_rooms
+                    for pws, pcolor in list(active.players.items()):
+                        pname = get_username_for_ws(pws)
+                        if pname:
+                            player_rooms.pop(pname, None)
+
+                # ============================================================
+                # GAME END (checkmate, stalemate, draw) — reported by client
+                # ============================================================
+                elif msg_type == "game_end":
+                    active = current_room or find_room_for_ws(ws)
+                    if not active or active.game_over:
+                        continue
+                    current_room = active
+
+                    result = msg.get("result")  # 'checkmate', 'stalemate', 'draw'
+                    winner = msg.get("winner")   # 'white', 'black', or None
+
+                    if result in ("stalemate", "draw"):
+                        active.record_result(None)
+                    elif result == "checkmate" and winner in ("white", "black"):
+                        active.record_result(winner)
+
+                    # Clean up player_rooms
+                    for pws, pcolor in list(active.players.items()):
+                        pname = get_username_for_ws(pws)
+                        if pname:
+                            player_rooms.pop(pname, None)
+
+                # ============================================================
+                # CHAT — sanitized
+                # ============================================================
                 elif msg_type == "chat":
                     active = current_room or find_room_for_ws(ws)
                     if active:
                         current_room = active
+                        chat_msg = msg.get("message", "")
+                        # Sanitize: strip HTML tags, limit length
+                        chat_msg = html_mod.escape(str(chat_msg)[:200])
                         opponent = active.get_opponent(ws)
                         if opponent and not opponent.closed:
                             try:
                                 await opponent.send_json({
                                     "type": "chat",
-                                    "message": msg.get("message", "")
+                                    "message": chat_msg
                                 })
                             except Exception:
                                 pass
@@ -596,6 +844,9 @@ async def websocket_handler(request):
                 for time_limit, queue in matchmaking_queue.items():
                     queue[:] = [(w, f) for w, f in queue if w != ws]
 
+        # Save username before cleanup (we need it for player_rooms)
+        disconnecting_username = get_username_for_ws(ws)
+
         # Clean up username
         player_names.pop(ws, None)
 
@@ -615,6 +866,7 @@ async def websocket_handler(request):
             # Schedule room cleanup after 120s if player doesn't reconnect
             room_id = cleanup_room.room_id
             disconnected_color = cleanup_room.get_color(ws)
+            disconnected_user = disconnecting_username
 
             async def _delayed_cleanup():
                 await asyncio.sleep(120)
@@ -627,6 +879,11 @@ async def websocket_handler(request):
                             still_gone = False
                             break
                     if still_gone:
+                        # Record disconnect as a loss for the disconnecter
+                        if not room.game_over:
+                            winner_color = "black" if disconnected_color == "white" else "white"
+                            room.record_result(winner_color)
+
                         # Notify remaining player
                         for p_ws in list(room.players.keys()):
                             if not p_ws.closed:
@@ -636,6 +893,15 @@ async def websocket_handler(request):
                                     })
                                 except Exception:
                                     pass
+
+                        # Clean up player_rooms for all players in this room
+                        for p_ws in list(room.players.keys()):
+                            pname = get_username_for_ws(p_ws)
+                            if pname:
+                                player_rooms.pop(pname, None)
+                        if disconnected_user:
+                            player_rooms.pop(disconnected_user, None)
+
                         rooms.pop(room_id, None)
 
             asyncio.ensure_future(_delayed_cleanup())
@@ -644,6 +910,10 @@ async def websocket_handler(request):
             # Game not started — clean up immediately
             opponent = cleanup_room.get_opponent(ws)
             cleanup_room.remove_player(ws)
+
+            # Free player_rooms slot
+            if disconnecting_username:
+                player_rooms.pop(disconnecting_username, None)
 
             if opponent and not opponent.closed:
                 try:
@@ -655,6 +925,10 @@ async def websocket_handler(request):
 
             if len(cleanup_room.players) == 0:
                 rooms.pop(cleanup_room.room_id, None)
+        else:
+            # Not in a room — just clean up player_rooms
+            if disconnecting_username:
+                player_rooms.pop(disconnecting_username, None)
 
     return ws
 

@@ -322,8 +322,8 @@ class ChessApp {
     bar.classList.remove('hidden');
   }
 
-  async reportGameResult(result) {
-    if (!this.authToken || !result) return;
+  async refreshStats() {
+    if (!this.authToken) return;
     try {
       const resp = await fetch('/api/game-result', {
         method: 'POST',
@@ -331,7 +331,7 @@ class ChessApp {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + this.authToken
         },
-        body: JSON.stringify({ result })
+        body: JSON.stringify({})
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -339,7 +339,7 @@ class ChessApp {
         this.updateStatsBar();
       }
     } catch (e) {
-      console.warn('[App] Failed to report game result:', e);
+      console.warn('[App] Failed to refresh stats:', e);
     }
   }
 
@@ -461,8 +461,10 @@ class ChessApp {
   setupGameCallbacks() {
     this.onlineGame.onGameEnd = (result) => {
       console.log('[App] Online game ended:', result);
-      if (result && this.authToken) {
-        this.reportGameResult(result);
+      // Stats are recorded server-side — just refresh our local display
+      if (this.authToken) {
+        // Small delay to let the server process the game_end message
+        setTimeout(() => this.refreshStats(), 500);
       }
     };
     

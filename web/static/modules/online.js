@@ -704,16 +704,26 @@ export class OnlineGame {
     hide(this.btnResign);
     show(this.btnBackMenu);
 
+    // Compute result relative to this player
+    let result = null;
+    if (this.engine.result === 'stalemate' || this.engine.result === 'draw') {
+      result = 'draw';
+    } else if (this.engine.winner === this.myColor) {
+      result = 'win';
+    } else if (this.engine.winner !== null) {
+      result = 'loss';
+    }
+
+    // Notify server about game end (for server-side stat recording)
+    if (this.engine.result && this.engine.result !== 'disconnect') {
+      this.send({
+        type: 'game_end',
+        result: this.engine.result,
+        winner: this.engine.winner || null
+      });
+    }
+
     if (this.onGameEnd) {
-      // Compute result relative to this player
-      let result = null;
-      if (this.engine.result === 'stalemate' || this.engine.result === 'draw') {
-        result = 'draw';
-      } else if (this.engine.winner === this.myColor) {
-        result = 'win';
-      } else if (this.engine.winner !== null) {
-        result = 'loss';
-      }
       this.onGameEnd(result);
     }
   }
