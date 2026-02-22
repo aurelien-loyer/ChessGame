@@ -691,6 +691,8 @@ export class OnlineGame {
     show(this.ui.gameOverModal);
     hide(this.btnResign);
     show(this.btnBackMenu);
+
+    if (this.onGameEnd) this.onGameEnd('loss');
   }
 
   /**
@@ -703,7 +705,16 @@ export class OnlineGame {
     show(this.btnBackMenu);
 
     if (this.onGameEnd) {
-      this.onGameEnd();
+      // Compute result relative to this player
+      let result = null;
+      if (this.engine.result === 'stalemate' || this.engine.result === 'draw') {
+        result = 'draw';
+      } else if (this.engine.winner === this.myColor) {
+        result = 'win';
+      } else if (this.engine.winner !== null) {
+        result = 'loss';
+      }
+      this.onGameEnd(result);
     }
   }
 

@@ -49,7 +49,58 @@
                 </button>
             </div>
 
-            <p class="ms-footer">Aucune inscription. Jeu immédiat.</p>
+            <p class="ms-footer">Classement mondial · Créez votre compte</p>
+        </div>
+    </div>
+
+    <!-- ===== AUTH SCREEN (Multiplayer) ===== -->
+    <div id="auth-screen" class="screen">
+        <div class="ms-wrapper auth-wrapper">
+            <div class="ms-hero auth-hero">
+                <div class="ms-hero-icon">⚔</div>
+                <h1 class="ms-title">Chess <span class="welcome-gradient">Arena</span></h1>
+                <p class="ms-subtitle">Créez un compte ou connectez-vous</p>
+            </div>
+
+            <!-- Tab selector -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="tab-login">Connexion</button>
+                <button class="auth-tab" id="tab-register">Inscription</button>
+            </div>
+
+            <!-- Login form -->
+            <form id="login-form" class="auth-form">
+                <div class="auth-field">
+                    <label class="auth-label">Pseudo</label>
+                    <input type="text" id="login-username" class="auth-input"
+                        placeholder="Votre pseudo" autocomplete="username" maxlength="20" />
+                </div>
+                <div class="auth-field">
+                    <label class="auth-label">Mot de passe</label>
+                    <input type="password" id="login-password" class="auth-input"
+                        placeholder="••••••••" autocomplete="current-password" />
+                </div>
+                <p id="login-error" class="auth-error hidden"></p>
+                <button type="submit" class="btn-auth-submit">Se connecter →</button>
+            </form>
+
+            <!-- Register form -->
+            <form id="register-form" class="auth-form hidden">
+                <div class="auth-field">
+                    <label class="auth-label">Pseudo</label>
+                    <input type="text" id="register-username" class="auth-input"
+                        placeholder="2-20 caractères" autocomplete="username" maxlength="20" />
+                </div>
+                <div class="auth-field">
+                    <label class="auth-label">Mot de passe</label>
+                    <input type="password" id="register-password" class="auth-input"
+                        placeholder="4 caractères minimum" autocomplete="new-password" />
+                </div>
+                <p id="register-error" class="auth-error hidden"></p>
+                <button type="submit" class="btn-auth-submit">Créer le compte ✦</button>
+            </form>
+
+            <button id="btn-auth-back" class="btn-back-auth">← Retour</button>
         </div>
     </div>
 
@@ -79,6 +130,24 @@
                 <div class="lobby-icon">♔</div>
                 <h1>Chess<span>Arena</span></h1>
                 <p class="tagline" id="welcome-tagline">Prêt à en découdre ?</p>
+            </div>
+
+            <!-- Player stats bar (online mode only) -->
+            <div id="player-stats-bar" class="player-stats-bar hidden">
+                <div class="stats-left">
+                    <span class="stats-username" id="stats-username">Joueur</span>
+                    <div class="stats-record">
+                        <span class="stat-win" id="stats-wins">0</span><span class="stat-label">V</span>
+                        <span class="stat-sep">·</span>
+                        <span class="stat-draw" id="stats-draws">0</span><span class="stat-label">N</span>
+                        <span class="stat-sep">·</span>
+                        <span class="stat-loss" id="stats-losses">0</span><span class="stat-label">D</span>
+                    </div>
+                </div>
+                <div class="stats-right">
+                    <button id="btn-ranking" class="btn-stats-action" title="Classement">🏆</button>
+                    <button id="btn-logout" class="btn-stats-action btn-logout-icon" title="Déconnexion">⇥</button>
+                </div>
             </div>
 
             <!-- Card -->
@@ -212,6 +281,17 @@
             </div>
 
         </div>
+        <!-- Ranking overlay -->
+        <div id="ranking-overlay" class="overlay hidden">
+            <div class="dialog ranking-dialog">
+                <button id="btn-close-ranking" class="btn-close-ranking">✕</button>
+                <h2 class="ranking-title">🏆 Classement</h2>
+                <div id="ranking-list" class="ranking-list">
+                    <p class="ranking-loading">Chargement…</p>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- ===== GAME ===== -->

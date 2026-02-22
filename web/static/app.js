@@ -33,11 +33,14 @@ class ChessApp {
     this.currentMode = 'online';
     this.selectedTime = 300;
     this.username = null;
+    this.authToken = localStorage.getItem('chess_token') || null;
+    this.userStats = { wins: 0, losses: 0, draws: 0 };
     this.salonMode = false;
     
     // DOM References
     this.modeSelectScreen = $('mode-select-screen');
     this.welcomeScreen = $('welcome-screen');
+    this.authScreen = $('auth-screen');
     this.lobbyScreen = $('lobby');
     this.gameScreen = $('game');
     this.lobbyContent = $('lobby-content');
@@ -49,6 +52,7 @@ class ChessApp {
     // Initialize
     this.setupModeSelectScreen();
     this.setupWelcomeScreen();
+    this.setupAuthScreen();
     this.setupEventListeners();
     this.setupGameCallbacks();
   }
@@ -94,56 +98,303 @@ class ChessApp {
   }
 
   /**
-   * Transition from mode select to welcome screen
+   * Transition from mode select
    */
   transitionToWelcome() {
     hide(this.modeSelectScreen);
     this.modeSelectScreen.classList.remove('active');
-    show(this.welcomeScreen);
-    this.welcomeScreen.classList.add('active');
-    setTimeout(() => $('input-username').focus(), 200);
+
+    if (this.salonMode) {
+      // Solo vs IA — welcome screen with JOUER button
+      show(this.welcomeScreen);
+      this.welcomeScreen.classList.add('active');
+    } else {
+      // Multiplayer — check auth token first
+      if (this.authToken) {
+        this.verifyToken(this.authToken).then(user => {
+          if (user) {
+            this.onAuthSuccess(user.username, this.authToken, user);
+          } else {
+            this.authToken = null;
+            localStorage.removeItem('chess_token');
+            this._showAuthScreen();
+          }
+        });
+      } else {
+        this._showAuthScreen();
+      }
+    }
   }
 
   /**
-   * Setup welcome screen
+   * Setup welcome screen (Solo vs IA only)
    */
   setupWelcomeScreen() {
     const btnEnter = $('btn-enter');
     
-    const enterLobby = () => {
-      // Auto-generate cool username if none stored
-      let name = localStorage.getItem('chess_username');
-      if (!name) {
-          const adjs = ['Grand', 'Royal', 'Speedy', 'Silent', 'Golden', 'Silver', 'Iron', 'Mystic'];
-          const nouns = ['King', 'Rook', 'Knight', 'Pawn', 'Master', 'Legend', 'Ghost', 'Wolf'];
-          name = adjs[Math.floor(Math.random()*adjs.length)] + ' ' + nouns[Math.floor(Math.random()*nouns.length)];
-          localStorage.setItem('chess_username', name);
-      }
-      
-      this.username = name;
-      
-      // Pass username to online game
+    btnEnter.addEventListener('click', () => {
+      // Use logged-in username if available, else generate guest name
+      const name = this.username || this.generateGuestName();
       this.onlineGame.username = name;
       
-      // Show tagline with username
-      const tagline = $('welcome-tagline');
-      if (tagline) tagline.textContent = `Bienvenue !`;
+      this.setupSalonLobby();
       
-      // Adapt lobby for salon mode (silently force AI)
-      if (this.salonMode) {
-        this.setupSalonLobby();
-      } else {
-        this.resetLobbyToNormal();
-      }
-      
-      // Transition
       hide(this.welcomeScreen);
       this.welcomeScreen.classList.remove('active');
       show(this.lobbyScreen);
       this.lobbyScreen.classList.add('active');
-    };
+    });
+  }
 
-    btnEnter.addEventListener('click', enterLobby);
+  /**
+   * Setup auth screen event listeners
+   */
+  setupAuthScreen() {
+    $('tab-login').addEventListener('click', () => this.switchAuthTab('login'));
+    $('tab-register').addEventListener('click', () => this.switchAuthTab('register'));
+    $('login-form').addEventListener('submit', e => { e.preventDefault(); this.doLogin(); });
+    $('register-form').addEventListener('submit', e => { e.preventDefault(); this.doRegister(); });
+    $('btn-auth-back').addEventListener('click', () => this.authBack());
+  }
+
+  // =========================================================================
+  // Auth helpers
+  // =========================================================================
+
+  generateGuestName() {
+    const adjs  = ['Grand', 'Royal', 'Speedy', 'Silent', 'Golden', 'Silver', 'Iron', 'Mystic'];
+    const nouns = ['King', 'Rook', 'Knight', 'Pawn', 'Master', 'Legend', 'Ghost', 'Wolf'];
+    return adjs[Math.floor(Math.random() * adjs.length)] + nouns[Math.floor(Math.random() * nouns.length)];
+  }
+
+  _showAuthScreen() {
+    show(this.authScreen);
+    this.authScreen.classList.add('active');
+    // Reset forms
+    $('login-form').reset();
+    $('register-form').reset();
+    $('login-error').classList.add('hidden');
+    $('register-error').classList.add('hidden');
+    this.switchAuthTab('login');
+    setTimeout(() => $('login-username').focus(), 100);
+  }
+
+  switchAuthTab(tab) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    $('tab-' + tab).classList.add('active');
+    if (tab === 'login') {
+      $('login-form').classList.remove('hidden');
+      $('register-form').classList.add('hidden');
+      setTimeout(() => $('login-username').focus(), 50);
+    } else {
+      $('login-form').classList.add('hidden');
+      $('register-form').classList.remove('hidden');
+      setTimeout(() => $('register-username').focus(), 50);
+    }
+  }
+
+  async doLogin() {
+    const username = $('login-username').value.trim();
+    const password = $('login-password').value.trim();
+    const errorEl  = $('login-error');
+    errorEl.classList.add('hidden');
+
+    if (!username || !password) {
+      errorEl.textContent = 'Remplissez tous les champs';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        errorEl.textContent = data.error || 'Erreur de connexion';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      this.onAuthSuccess(data.username, data.token, data);
+    } catch {
+      errorEl.textContent = 'Impossible de joindre le serveur';
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  async doRegister() {
+    const username = $('register-username').value.trim();
+    const password = $('register-password').value.trim();
+    const errorEl  = $('register-error');
+    errorEl.classList.add('hidden');
+
+    if (!username || !password) {
+      errorEl.textContent = 'Remplissez tous les champs';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        errorEl.textContent = data.error || 'Erreur lors de la création';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      this.onAuthSuccess(data.username, data.token, data);
+    } catch {
+      errorEl.textContent = 'Impossible de joindre le serveur';
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  async verifyToken(token) {
+    try {
+      const resp = await fetch('/api/verify-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Called after successful login or register
+   * @param {boolean} [transition=true] whether to transition to the lobby
+   */
+  onAuthSuccess(username, token, stats, transition = true) {
+    this.username  = username;
+    this.authToken = token;
+    this.userStats = { wins: stats.wins || 0, losses: stats.losses || 0, draws: stats.draws || 0 };
+
+    localStorage.setItem('chess_token',    token);
+    localStorage.setItem('chess_username', username);
+
+    this.onlineGame.username = username;
+
+    // Hide auth screen
+    hide(this.authScreen);
+    this.authScreen.classList.remove('active');
+
+    if (transition) {
+      this.resetLobbyToNormal();
+      this.updateStatsBar();
+      show(this.lobbyScreen);
+      this.lobbyScreen.classList.add('active');
+    }
+  }
+
+  authBack() {
+    hide(this.authScreen);
+    this.authScreen.classList.remove('active');
+    show(this.modeSelectScreen);
+    this.modeSelectScreen.classList.add('active');
+  }
+
+  // =========================================================================
+  // Stats & ranking helpers
+  // =========================================================================
+
+  updateStatsBar() {
+    const bar = $('player-stats-bar');
+    if (!bar) return;
+
+    if (this.salonMode || !this.username) {
+      bar.classList.add('hidden');
+      return;
+    }
+
+    $('stats-username').textContent = this.username;
+    $('stats-wins').textContent     = this.userStats?.wins   || 0;
+    $('stats-draws').textContent    = this.userStats?.draws  || 0;
+    $('stats-losses').textContent   = this.userStats?.losses || 0;
+    bar.classList.remove('hidden');
+  }
+
+  async reportGameResult(result) {
+    if (!this.authToken || !result) return;
+    try {
+      const resp = await fetch('/api/game-result', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.authToken
+        },
+        body: JSON.stringify({ result })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        this.userStats = { wins: data.wins, losses: data.losses, draws: data.draws };
+        this.updateStatsBar();
+      }
+    } catch (e) {
+      console.warn('[App] Failed to report game result:', e);
+    }
+  }
+
+  async showRanking() {
+    const overlay = $('ranking-overlay');
+    const list    = $('ranking-list');
+    overlay.classList.remove('hidden');
+    list.innerHTML = '<p class="ranking-loading">Chargement…</p>';
+
+    try {
+      const resp = await fetch('/api/ranking');
+      const data = await resp.json();
+
+      if (!data.ranking || data.ranking.length === 0) {
+        list.innerHTML = '<p class="ranking-loading">Aucun joueur classé pour l\'instant</p>';
+        return;
+      }
+
+      list.innerHTML = data.ranking.map(p => {
+        const rankEmoji = p.rank === 1 ? '🥇' : p.rank === 2 ? '🥈' : p.rank === 3 ? '🥉' : p.rank;
+        const isMe = p.username === this.username;
+        return `
+          <div class="ranking-row${isMe ? ' ranking-me' : ''}">
+            <span class="rank-pos">${rankEmoji}</span>
+            <span class="rank-name">${p.username}</span>
+            <span class="rank-stats">
+              <span class="stat-win">${p.wins}V</span>
+              <span class="stat-sep">·</span>
+              <span class="stat-draw">${p.draws}N</span>
+              <span class="stat-sep">·</span>
+              <span class="stat-loss">${p.losses}D</span>
+            </span>
+            <span class="rank-games">${p.games} partie${p.games !== 1 ? 's' : ''}</span>
+          </div>`;
+      }).join('');
+    } catch {
+      list.innerHTML = '<p class="ranking-loading">Erreur de chargement</p>';
+    }
+  }
+
+  logout() {
+    localStorage.removeItem('chess_token');
+    localStorage.removeItem('chess_username');
+    this.authToken = null;
+    this.username  = null;
+    this.userStats = { wins: 0, losses: 0, draws: 0 };
+
+    this.onlineGame.cleanup();
+
+    $('player-stats-bar')?.classList.add('hidden');
+
+    hide(this.lobbyScreen);
+    this.lobbyScreen.classList.remove('active');
+    show(this.modeSelectScreen);
+    this.modeSelectScreen.classList.add('active');
   }
 
   /**
@@ -197,14 +448,22 @@ class ChessApp {
     $('btn-resign').addEventListener('click', () => this.resign());
     $('btn-back-menu').addEventListener('click', () => this.backToLobby());
     $('btn-new-game').addEventListener('click', () => this.backToLobby());
+
+    // Stats bar actions
+    $('btn-ranking').addEventListener('click', () => this.showRanking());
+    $('btn-close-ranking').addEventListener('click', () => $('ranking-overlay').classList.add('hidden'));
+    $('btn-logout').addEventListener('click', () => this.logout());
   }
 
   /**
    * Setup game callbacks
    */
   setupGameCallbacks() {
-    this.onlineGame.onGameEnd = () => {
-      console.log('[App] Online game ended');
+    this.onlineGame.onGameEnd = (result) => {
+      console.log('[App] Online game ended:', result);
+      if (result && this.authToken) {
+        this.reportGameResult(result);
+      }
     };
     
     this.offlineGame.onGameEnd = () => {
@@ -416,15 +675,8 @@ class ChessApp {
     hide(this.gameScreen);
     this.gameScreen.classList.remove('active');
     
-    // In salon mode, go back to lobby (keep playing)
-    // In normal mode, go back to mode selection
-    if (this.salonMode) {
-      show(this.lobbyScreen);
-      this.lobbyScreen.classList.add('active');
-    } else {
-      show(this.lobbyScreen);
-      this.lobbyScreen.classList.add('active');
-    }
+    show(this.lobbyScreen);
+    this.lobbyScreen.classList.add('active');
     
     hide(this.waitingPanel);
     hide(this.matchmakingPanel);
@@ -432,6 +684,12 @@ class ChessApp {
     hide(this.lobbyStatus);
     
     this.inputRoom.value = '';
+
+    // Close ranking overlay if open
+    $('ranking-overlay')?.classList.add('hidden');
+
+    // Refresh stats bar for multiplayer
+    this.updateStatsBar();
   }
 }
 

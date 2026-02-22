@@ -11,6 +11,9 @@ import os
 import random
 import string
 import shutil
+import hashlib
+import secrets
+import sqlite3
 from pathlib import Path
 
 from aiohttp import web
@@ -24,6 +27,34 @@ STOCKFISH_PATH = shutil.which("stockfish") or "/usr/games/stockfish"
 # --- Configuration ---
 PORT = int(os.environ.get("PORT", 8080))
 STATIC_DIR = Path(__file__).parent / "static"
+DB_PATH = Path(__file__).parent / "chess_users.db"
+
+# --- Auth Tokens (in-memory) ---
+auth_tokens = {}  # token -> username
+
+
+def init_db():
+    """Initialize SQLite database for user accounts."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            wins INTEGER DEFAULT 0,
+            losses INTEGER DEFAULT 0,
+            draws INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
+    print("[DB] Users database initialized")
+
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
 
 # --- Rooms ---
 rooms = {}  # room_id -> Room
@@ -97,6 +128,156 @@ def find_room_for_ws(ws):
         if ws in room.players and room.started:
             return room
     return None
+
+
+# --- Auth & Ranking handlers ---
+
+async def register_handler(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({'error': 'JSON invalide'}, status=400)
+
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+
+    if len(username) < 2 or len(username) > 20:
+        return web.json_response({'error': 'Pseudo : 2 à 20 caractères'}, status=400)
+    if not all(c.isalnum() or c in '-_' for c in username):
+        return web.json_response({'error': 'Pseudo : lettres, chiffres, - et _ uniquement'}, status=400)
+    if len(password) < 4:
+        return web.json_response({'error': 'Mot de passe : 4 caractères minimum'}, status=400)
+
+    pw_hash = hash_password(password)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            (username, pw_hash)
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT username, wins, losses, draws FROM users WHERE username = ? COLLATE NOCASE",
+            (username,)
+        ).fetchone()
+        conn.close()
+    except sqlite3.IntegrityError:
+        return web.json_response({'error': 'Ce pseudo est déjà pris'}, status=409)
+
+    token = secrets.token_hex(32)
+    auth_tokens[token] = row[0]
+    return web.json_response({
+        'token': token, 'username': row[0],
+        'wins': row[1], 'losses': row[2], 'draws': row[3]
+    })
+
+
+async def login_handler(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({'error': 'JSON invalide'}, status=400)
+
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    pw_hash = hash_password(password)
+
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT username, wins, losses, draws FROM users WHERE username = ? COLLATE NOCASE AND password_hash = ?",
+        (username, pw_hash)
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        return web.json_response({'error': 'Identifiants incorrects'}, status=401)
+
+    token = secrets.token_hex(32)
+    auth_tokens[token] = row[0]
+    return web.json_response({
+        'token': token, 'username': row[0],
+        'wins': row[1], 'losses': row[2], 'draws': row[3]
+    })
+
+
+async def verify_token_handler(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({'error': 'JSON invalide'}, status=400)
+
+    token = data.get('token', '').strip()
+    username = auth_tokens.get(token)
+
+    if not username:
+        return web.json_response({'error': 'Token invalide'}, status=401)
+
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT username, wins, losses, draws FROM users WHERE username = ?",
+        (username,)
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        auth_tokens.pop(token, None)
+        return web.json_response({'error': 'Utilisateur introuvable'}, status=404)
+
+    return web.json_response({
+        'username': row[0], 'wins': row[1], 'losses': row[2], 'draws': row[3]
+    })
+
+
+async def ranking_handler(request):
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("""
+        SELECT username, wins, losses, draws,
+               (wins + losses + draws) AS games
+        FROM users
+        ORDER BY wins DESC, losses ASC, created_at ASC
+        LIMIT 100
+    """).fetchall()
+    conn.close()
+
+    ranking = [
+        {'rank': i + 1, 'username': r[0], 'wins': r[1], 'losses': r[2], 'draws': r[3], 'games': r[4]}
+        for i, r in enumerate(rows)
+    ]
+    return web.json_response({'ranking': ranking})
+
+
+async def game_result_handler(request):
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.replace('Bearer ', '').strip()
+    username = auth_tokens.get(token)
+
+    if not username:
+        return web.json_response({'error': 'Non authentifié'}, status=401)
+
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({'error': 'JSON invalide'}, status=400)
+
+    result = data.get('result')
+    if result not in ('win', 'loss', 'draw'):
+        return web.json_response({'error': 'Résultat invalide'}, status=400)
+
+    conn = sqlite3.connect(DB_PATH)
+    if result == 'win':
+        conn.execute("UPDATE users SET wins = wins + 1 WHERE username = ?", (username,))
+    elif result == 'loss':
+        conn.execute("UPDATE users SET losses = losses + 1 WHERE username = ?", (username,))
+    else:
+        conn.execute("UPDATE users SET draws = draws + 1 WHERE username = ?", (username,))
+    conn.commit()
+    row = conn.execute(
+        "SELECT wins, losses, draws FROM users WHERE username = ?",
+        (username,)
+    ).fetchone()
+    conn.close()
+
+    return web.json_response({'wins': row[0], 'losses': row[1], 'draws': row[2]})
 
 
 # --- WebSocket handler ---
@@ -618,6 +799,13 @@ def create_app():
     app = web.Application()
     app.router.add_get("/health", health_handler)
     app.router.add_post("/api/ai-move", ai_move_handler)
+    # Auth & ranking
+    app.router.add_post("/api/register", register_handler)
+    app.router.add_post("/api/login", login_handler)
+    app.router.add_post("/api/verify-token", verify_token_handler)
+    app.router.add_get("/api/ranking", ranking_handler)
+    app.router.add_post("/api/game-result", game_result_handler)
+    # WebSocket & static
     app.router.add_get("/ws", websocket_handler)
     app.router.add_get("/", index_handler)
     app.router.add_static("/", STATIC_DIR, show_index=False)
@@ -633,6 +821,7 @@ if __name__ == "__main__":
     print("=" * 50)
     print()
     print("Application loading")
+    init_db()
     print()
 
     app = create_app()
