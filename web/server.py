@@ -13,7 +13,6 @@ import string
 import shutil
 import hashlib
 import secrets
-import sqlite3
 import html as html_mod
 from pathlib import Path
 
@@ -28,33 +27,142 @@ STOCKFISH_PATH = shutil.which("stockfish") or "/usr/games/stockfish"
 # --- Configuration ---
 PORT = int(os.environ.get("PORT", 8080))
 STATIC_DIR = Path(__file__).parent / "static"
-DB_PATH = Path(__file__).parent / "chess_users.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-# --- Auth Tokens (in-memory) ---
-auth_tokens = {}  # token -> username
+# --- Database Abstraction ---
+_use_postgres = bool(DATABASE_URL)
+
+if _use_postgres:
+    import psycopg2
+    import psycopg2.extras
+    print(f"[DB] Using PostgreSQL")
+else:
+    import sqlite3
+    print("[DB] Using SQLite (local dev)")
+
+_DB_PATH = Path(__file__).parent / "chess_users.db"  # SQLite fallback
+
+
+def get_db():
+    """Get a database connection (PostgreSQL or SQLite)."""
+    if _use_postgres:
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.autocommit = False
+        return conn
+    else:
+        conn = sqlite3.connect(_DB_PATH)
+        return conn
+
+
+def _ph(index=1):
+    """Return placeholder for parameterized queries: %s (PG) or ? (SQLite)."""
+    return "%s" if _use_postgres else "?"
+
+
+def _P(*args):
+    """Just pass params through — both drivers accept tuples."""
+    return args
 
 
 def init_db():
-    """Initialize SQLite database for user accounts."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
-            password_hash TEXT NOT NULL,
-            created_at TEXT DEFAULT (datetime('now')),
-            wins INTEGER DEFAULT 0,
-            losses INTEGER DEFAULT 0,
-            draws INTEGER DEFAULT 0
-        )
-    """)
+    """Initialize database tables."""
+    conn = get_db()
+    cur = conn.cursor()
+    if _use_postgres:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                draws INTEGER DEFAULT 0
+            )
+        """)
+        # Case-insensitive unique index for usernames
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower
+            ON users (LOWER(username))
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auth_tokens (
+                token TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                draws INTEGER DEFAULT 0
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auth_tokens (
+                token TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
     conn.commit()
+    cur.close()
     conn.close()
-    print("[DB] Users database initialized")
+    print("[DB] Database tables initialized")
 
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+# --- Token helpers (DB-backed, survive restarts) ---
+
+def store_token(token: str, username: str):
+    """Store an auth token in the database."""
+    conn = get_db()
+    try:
+        p = _ph()
+        conn.cursor().execute(
+            f"INSERT INTO auth_tokens (token, username) VALUES ({p}, {p})",
+            (token, username)
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def lookup_token(token: str):
+    """Look up a token and return the username, or None."""
+    conn = get_db()
+    try:
+        p = _ph()
+        cur = conn.cursor()
+        cur.execute(f"SELECT username FROM auth_tokens WHERE token = {p}", (token,))
+        row = cur.fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def delete_token(token: str):
+    """Remove an auth token."""
+    conn = get_db()
+    try:
+        p = _ph()
+        conn.cursor().execute(f"DELETE FROM auth_tokens WHERE token = {p}", (token,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    finally:
+        conn.close()
 
 
 # --- Rooms ---
@@ -173,19 +281,25 @@ class Room:
         if not white_user or not black_user:
             return
 
-        conn = sqlite3.connect(DB_PATH)
-        if winner_color is None:
-            # Draw
-            conn.execute("UPDATE users SET draws = draws + 1 WHERE username = ?", (white_user,))
-            conn.execute("UPDATE users SET draws = draws + 1 WHERE username = ?", (black_user,))
-        elif winner_color == 'white':
-            conn.execute("UPDATE users SET wins = wins + 1 WHERE username = ?", (white_user,))
-            conn.execute("UPDATE users SET losses = losses + 1 WHERE username = ?", (black_user,))
-        elif winner_color == 'black':
-            conn.execute("UPDATE users SET wins = wins + 1 WHERE username = ?", (black_user,))
-            conn.execute("UPDATE users SET losses = losses + 1 WHERE username = ?", (white_user,))
-        conn.commit()
-        conn.close()
+        conn = get_db()
+        p = _ph()
+        try:
+            cur = conn.cursor()
+            if winner_color is None:
+                cur.execute(f"UPDATE users SET draws = draws + 1 WHERE username = {p}", (white_user,))
+                cur.execute(f"UPDATE users SET draws = draws + 1 WHERE username = {p}", (black_user,))
+            elif winner_color == 'white':
+                cur.execute(f"UPDATE users SET wins = wins + 1 WHERE username = {p}", (white_user,))
+                cur.execute(f"UPDATE users SET losses = losses + 1 WHERE username = {p}", (black_user,))
+            elif winner_color == 'black':
+                cur.execute(f"UPDATE users SET wins = wins + 1 WHERE username = {p}", (black_user,))
+                cur.execute(f"UPDATE users SET losses = losses + 1 WHERE username = {p}", (white_user,))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"[DB] Error recording result: {e}")
+        finally:
+            conn.close()
         print(f"[GAME] Result recorded: room={self.room_id} winner={winner_color} "
               f"white={white_user} black={black_user}")
 
@@ -222,23 +336,31 @@ async def register_handler(request):
         return web.json_response({'error': 'Mot de passe : 4 caractères minimum'}, status=400)
 
     pw_hash = hash_password(password)
+    conn = get_db()
+    p = _ph()
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO users (username, password_hash) VALUES ({p}, {p})",
             (username, pw_hash)
         )
         conn.commit()
-        row = conn.execute(
-            "SELECT username, wins, losses, draws FROM users WHERE username = ? COLLATE NOCASE",
+        cur.execute(
+            f"SELECT username, wins, losses, draws FROM users WHERE LOWER(username) = LOWER({p})",
             (username,)
-        ).fetchone()
+        )
+        row = cur.fetchone()
+    except Exception as e:
+        conn.rollback()
+        err_str = str(e).lower()
+        if 'unique' in err_str or 'duplicate' in err_str or 'integrity' in err_str:
+            return web.json_response({'error': 'Ce pseudo est déjà pris'}, status=409)
+        raise
+    finally:
         conn.close()
-    except sqlite3.IntegrityError:
-        return web.json_response({'error': 'Ce pseudo est déjà pris'}, status=409)
 
     token = secrets.token_hex(32)
-    auth_tokens[token] = row[0]
+    store_token(token, row[0])
     return web.json_response({
         'token': token, 'username': row[0],
         'wins': row[1], 'losses': row[2], 'draws': row[3]
@@ -255,18 +377,23 @@ async def login_handler(request):
     password = data.get('password', '').strip()
     pw_hash = hash_password(password)
 
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute(
-        "SELECT username, wins, losses, draws FROM users WHERE username = ? COLLATE NOCASE AND password_hash = ?",
-        (username, pw_hash)
-    ).fetchone()
-    conn.close()
+    conn = get_db()
+    p = _ph()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT username, wins, losses, draws FROM users WHERE LOWER(username) = LOWER({p}) AND password_hash = {p}",
+            (username, pw_hash)
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
 
     if not row:
         return web.json_response({'error': 'Identifiants incorrects'}, status=401)
 
     token = secrets.token_hex(32)
-    auth_tokens[token] = row[0]
+    store_token(token, row[0])
     return web.json_response({
         'token': token, 'username': row[0],
         'wins': row[1], 'losses': row[2], 'draws': row[3]
@@ -280,20 +407,25 @@ async def verify_token_handler(request):
         return web.json_response({'error': 'JSON invalide'}, status=400)
 
     token = data.get('token', '').strip()
-    username = auth_tokens.get(token)
+    username = lookup_token(token)
 
     if not username:
         return web.json_response({'error': 'Token invalide'}, status=401)
 
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute(
-        "SELECT username, wins, losses, draws FROM users WHERE username = ?",
-        (username,)
-    ).fetchone()
-    conn.close()
+    conn = get_db()
+    p = _ph()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT username, wins, losses, draws FROM users WHERE username = {p}",
+            (username,)
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
 
     if not row:
-        auth_tokens.pop(token, None)
+        delete_token(token)
         return web.json_response({'error': 'Utilisateur introuvable'}, status=404)
 
     return web.json_response({
@@ -302,15 +434,19 @@ async def verify_token_handler(request):
 
 
 async def ranking_handler(request):
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("""
-        SELECT username, wins, losses, draws,
-               (wins + losses + draws) AS games
-        FROM users
-        ORDER BY wins DESC, losses ASC, created_at ASC
-        LIMIT 100
-    """).fetchall()
-    conn.close()
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT username, wins, losses, draws,
+                   (wins + losses + draws) AS games
+            FROM users
+            ORDER BY wins DESC, losses ASC, created_at ASC
+            LIMIT 100
+        """)
+        rows = cur.fetchall()
+    finally:
+        conn.close()
 
     ranking = [
         {'rank': i + 1, 'username': r[0], 'wins': r[1], 'losses': r[2], 'draws': r[3], 'games': r[4]}
@@ -324,17 +460,22 @@ async def game_result_handler(request):
     Results are now recorded server-side only."""
     auth_header = request.headers.get('Authorization', '')
     token = auth_header.replace('Bearer ', '').strip()
-    username = auth_tokens.get(token)
+    username = lookup_token(token)
 
     if not username:
         return web.json_response({'error': 'Non authentifié'}, status=401)
 
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute(
-        "SELECT wins, losses, draws FROM users WHERE username = ?",
-        (username,)
-    ).fetchone()
-    conn.close()
+    conn = get_db()
+    p = _ph()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT wins, losses, draws FROM users WHERE username = {p}",
+            (username,)
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
 
     if not row:
         return web.json_response({'error': 'Utilisateur introuvable'}, status=404)
