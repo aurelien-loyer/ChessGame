@@ -27,10 +27,18 @@ STOCKFISH_PATH = shutil.which("stockfish") or "/usr/games/stockfish"
 # --- Configuration ---
 PORT = int(os.environ.get("PORT", 8080))
 STATIC_DIR = Path(__file__).parent / "static"
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+CHESS_DB_PATH = os.environ.get("CHESS_DB_PATH", "").strip()
+CHESS_REQUIRE_DATABASE = os.environ.get("CHESS_REQUIRE_DATABASE", "0").strip() == "1"
 
 # --- Database Abstraction ---
 _use_postgres = bool(DATABASE_URL)
+
+if CHESS_REQUIRE_DATABASE and not _use_postgres:
+    raise RuntimeError(
+        "DATABASE_URL est requis (CHESS_REQUIRE_DATABASE=1). "
+        "Le serveur a refusé le fallback SQLite pour éviter la perte de données."
+    )
 
 if _use_postgres:
     import psycopg2
@@ -38,9 +46,12 @@ if _use_postgres:
     print(f"[DB] Using PostgreSQL")
 else:
     import sqlite3
-    print("[DB] Using SQLite (local dev)")
+    print("[DB] Using SQLite")
 
-_DB_PATH = Path(__file__).parent / "chess_users.db"  # SQLite fallback
+_DB_PATH = Path(CHESS_DB_PATH) if CHESS_DB_PATH else (Path(__file__).parent / "chess_users.db")
+if not _use_postgres:
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[DB] SQLite path: {_DB_PATH}")
 
 
 def get_db():

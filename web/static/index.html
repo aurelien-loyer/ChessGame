@@ -163,6 +163,10 @@
                         <span class="mode-icon">🤖</span>
                         <span class="mode-text">Contre l'IA</span>
                     </button>
+                    <button class="mode-btn" data-mode="self">
+                        <span class="mode-icon">♟️</span>
+                        <span class="mode-text">2 joueurs local</span>
+                    </button>
                     <div class="mode-slider"></div>
                 </div>
 
@@ -236,6 +240,15 @@
                     <button id="btn-play-ai" class="btn-play">
                         <span class="btn-play-icon">♞</span>
                         Lancer la partie
+                    </button>
+                </div>
+
+                <!-- Local self-play actions -->
+                <div id="self-actions" class="actions-panel hidden">
+                    <p class="field-label">Même appareil, les deux couleurs</p>
+                    <button id="btn-play-self" class="btn-play">
+                        <span class="btn-play-icon">♔♚</span>
+                        Jouer contre soi-même
                     </button>
                 </div>
 

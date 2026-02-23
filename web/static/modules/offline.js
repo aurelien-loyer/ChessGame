@@ -17,6 +17,7 @@ export class OfflineGame {
     this.aiColor = 'black';
     this.playerColor = 'white';
     this.aiThinking = false;
+    this.gameVariant = 'ai'; // 'ai' | 'self'
     
     // Timer
     this.timerEnabled = true;
@@ -37,6 +38,7 @@ export class OfflineGame {
    * Start a new AI game
    */
   startGame(playerColor, aiDifficulty, timeLimit) {
+    this.gameVariant = 'ai';
     // Setup colors
     this.playerColor = playerColor;
     this.aiColor = playerColor === 'white' ? 'black' : 'white';
@@ -85,13 +87,55 @@ export class OfflineGame {
   }
 
   /**
+   * Start a local self-play game (2 humans on same board)
+   */
+  startSelfGame(timeLimit) {
+    this.gameVariant = 'self';
+    this.playerColor = 'white';
+    this.aiColor = null;
+    this.aiPlayer = null;
+    this.aiThinking = false;
+
+    if (timeLimit > 0) {
+      this.timerEnabled = true;
+      this.whiteTime = timeLimit;
+      this.blackTime = timeLimit;
+    } else {
+      this.timerEnabled = false;
+    }
+
+    this.engine.reset();
+    this.ui.reset();
+    this.ui.myColor = 'white';
+    this.ui.boardFlipped = false;
+
+    hide($('lobby'));
+    show($('game'));
+    $('game').classList.add('active');
+    hide(this.ui.gameOverModal);
+    hide(this.btnBackMenu);
+    show(this.btnResign);
+
+    this.ui.updatePlayerInfo('white', 'self');
+    this.ui.buildBoard(this.engine, (r, c) => this.onSquareClick(r, c));
+    this.syncUI();
+
+    if (this.timerEnabled) {
+      this.startTimer();
+    }
+  }
+
+  /**
    * Handle square click
    */
   onSquareClick(row, col) {
+    const currentMover = this.gameVariant === 'self' ? this.engine.turn : this.playerColor;
+
     // Prevent interaction during AI turn or game over
-    if (this.engine.gameOver || 
-        this.engine.turn !== this.playerColor || 
-        this.aiThinking) {
+    if (this.engine.gameOver || this.aiThinking) {
+      return;
+    }
+    if (this.gameVariant === 'ai' && this.engine.turn !== this.playerColor) {
       return;
     }
     
@@ -107,7 +151,7 @@ export class OfflineGame {
       }
       
       // Click own piece - change selection
-      if (piece?.color === this.playerColor) {
+      if (piece?.color === currentMover) {
         this.ui.selectSquare(row, col, this.engine);
         this.ui.renderBoard(this.engine);
         return;
@@ -121,13 +165,14 @@ export class OfflineGame {
       if (move) {
         // Handle promotion
         if (move.promotion) {
+          const movingPiece = this.engine.getPiece(this.ui.selectedSquare.row, this.ui.selectedSquare.col);
           this.ui.showPromotionDialog((promotionType) => {
             this.makeMove(
               { ...this.ui.selectedSquare }, 
               { row, col }, 
               promotionType
             );
-          });
+          }, movingPiece?.color || currentMover);
           return;
         }
         
@@ -138,7 +183,7 @@ export class OfflineGame {
         this.ui.deselectSquare();
         this.ui.renderBoard(this.engine);
       }
-    } else if (piece?.color === this.playerColor) {
+    } else if (piece?.color === currentMover) {
       // Select piece
       this.ui.selectSquare(row, col, this.engine);
       this.ui.renderBoard(this.engine);
@@ -156,7 +201,7 @@ export class OfflineGame {
       if (this.engine.gameOver) {
         this.stopTimer();
         this.showGameOver();
-      } else {
+      } else if (this.gameVariant === 'ai') {
         // AI's turn — use setTimeout(0) to let browser paint player's move first
         setTimeout(() => this.makeAIMove(), 0);
       }
@@ -186,6 +231,9 @@ export class OfflineGame {
    * Make AI move (async — supports Stockfish WASM Worker)
    */
   async makeAIMove() {
+    if (this.gameVariant !== 'ai') {
+      return;
+    }
     if (this.engine.gameOver || this.engine.turn !== this.aiColor) {
       return;
     }
@@ -237,7 +285,7 @@ export class OfflineGame {
   syncUI() {
     this.ui.updateCapturedPieces(this.engine);
     this.ui.renderBoard(this.engine);
-    this.ui.updateStatus(this.engine, 'ai', this.aiThinking);
+    this.ui.updateStatus(this.engine, this.gameVariant === 'self' ? 'self' : 'ai', this.aiThinking);
     this.ui.updateMoveHistory(this.engine);
     this.ui.updateTimerDisplay(this.whiteTime, this.blackTime, this.timerEnabled);
   }
@@ -250,11 +298,17 @@ export class OfflineGame {
     
     this.engine.gameOver = true;
     this.engine.result = 'resign';
-    this.engine.winner = this.playerColor === 'white' ? 'black' : 'white';
+    if (this.gameVariant === 'self') {
+      this.engine.winner = this.engine.turn === 'white' ? 'black' : 'white';
+    } else {
+      this.engine.winner = this.playerColor === 'white' ? 'black' : 'white';
+    }
     
     this.ui.gameOverIcon.textContent = '🏳';
     this.ui.gameOverTitle.textContent = 'Abandon';
-    this.ui.gameOverMessage.textContent = 'Vous avez abandonné.';
+    this.ui.gameOverMessage.textContent = this.gameVariant === 'self'
+      ? (this.engine.turn === 'white' ? 'Les blancs abandonnent.' : 'Les noirs abandonnent.')
+      : 'Vous avez abandonné.';
     
     show(this.ui.gameOverModal);
     hide(this.btnResign);
@@ -265,7 +319,7 @@ export class OfflineGame {
    * Show game over
    */
   showGameOver() {
-    this.ui.showGameOver(this.engine, 'ai');
+    this.ui.showGameOver(this.engine, this.gameVariant === 'self' ? 'self' : 'ai');
     hide(this.btnResign);
     show(this.btnBackMenu);
     

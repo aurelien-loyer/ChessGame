@@ -443,6 +443,7 @@ class ChessApp {
     
     // AI actions
     $('btn-play-ai').addEventListener('click', () => this.startAIGame());
+    $('btn-play-self').addEventListener('click', () => this.startSelfGame());
     
     // Game actions
     $('btn-resign').addEventListener('click', () => this.resign());
@@ -513,6 +514,7 @@ class ChessApp {
     
     $('online-actions').classList.toggle('hidden', mode !== 'online');
     $('ai-actions').classList.toggle('hidden', mode !== 'ai');
+    $('self-actions').classList.toggle('hidden', mode !== 'self');
   }
 
   /**
@@ -647,6 +649,14 @@ class ChessApp {
       this.offlineGame.aiDifficulty,
       this.selectedTime
     );
+  }
+
+  /**
+   * Start local self-play game
+   */
+  startSelfGame() {
+    console.log('[App] Starting local self-play game');
+    this.offlineGame.startSelfGame(this.selectedTime);
   }
 
   /**

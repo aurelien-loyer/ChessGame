@@ -504,7 +504,7 @@ body {
 /* --- Mode Switch --- */
 .mode-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   position: relative;
   background: var(--bg);
   border-radius: var(--r);
@@ -523,7 +523,7 @@ body {
   gap: 8px;
   padding: 14px 10px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--t3);
   background: none;
@@ -572,6 +572,11 @@ body {
 
 .mode-icon {
   font-size: 18px;
+}
+
+.mode-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* --- Field Components --- */
@@ -1157,12 +1162,9 @@ body {
   margin-left: -30px;
   z-index: 1;
 }
-  height: 42px;
-  border: 3px solid var(--brd);
-  border-top-color: var(--accent);
-  border-right-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+
+#self-actions {
+  text-align: center;
 }
 
 .mm-info {
@@ -1939,6 +1941,16 @@ body {
     gap: 16px;
   }
 
+  .mode-switch {
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .mode-btn {
+    gap: 6px;
+    padding: 12px 6px;
+  }
+
   /* Auth wrapper tablet */
   .auth-wrapper {
     max-width: calc(100vw - 32px) !important;
@@ -2037,9 +2049,14 @@ body {
 
   /* Mode buttons touch-friendly */
   .mode-btn {
-    padding: 14px 8px;
-    font-size: 13px;
+    padding: 12px 6px;
+    font-size: 12px;
     min-height: 48px;
+    gap: 4px;
+  }
+
+  .mode-icon {
+    font-size: 16px;
   }
 
   /* Play button */
@@ -2364,6 +2381,20 @@ body {
   .lobby-icon {
     font-size: 40px;
     margin-bottom: 8px;
+  }
+}
+
+@media (max-height: 760px) {
+  :root {
+    --board-size: min(84vw, calc(100vh - 250px));
+  }
+
+  .player-row {
+    padding: 8px 12px;
+  }
+
+  .status-row {
+    margin-top: 2px;
   }
 }
 

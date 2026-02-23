@@ -182,6 +182,12 @@ export class UIManager {
     const displaySelf = selfName ? selfName : 'Vous';
     this.selfLabel.textContent = `${displaySelf} (${colorName})`;
     
+    if (gameMode === 'self') {
+      this.selfLabel.textContent = 'Blancs';
+      this.opponentLabel.textContent = 'Noirs';
+      return;
+    }
+
     if (gameMode === 'ai') {
       const diffNames = {
         1: 'Facile',
@@ -202,6 +208,15 @@ export class UIManager {
   updateStatus(engine, gameMode, aiThinking = false) {
     const rows = document.querySelectorAll('.player-row');
     const [opponentRow, selfRow] = rows;
+
+    if (gameMode === 'self') {
+      const whiteTurn = engine.turn === 'white';
+      selfRow.classList.toggle('active-turn', whiteTurn);
+      opponentRow.classList.toggle('active-turn', !whiteTurn);
+      this.gameStatus.textContent = whiteTurn ? 'Tour des blancs' : 'Tour des noirs';
+      this.gameStatus.className = 'status-text';
+      return;
+    }
     
     if (engine.turn === this.myColor) {
       selfRow.classList.add('active-turn');
@@ -347,14 +362,15 @@ export class UIManager {
   /**
    * Show promotion dialog
    */
-  showPromotionDialog(onSelect) {
+  showPromotionDialog(onSelect, pieceColor = null) {
     this.promotionDialog.classList.remove('hidden');
     this.promotionChoices.innerHTML = '';
+    const color = pieceColor || this.myColor;
     
     for (const type of ['Q', 'R', 'B', 'N']) {
       const button = document.createElement('div');
       button.className = 'promotion-choice';
-      button.textContent = PIECE_SYMBOLS[type][this.myColor];
+      button.textContent = PIECE_SYMBOLS[type][color];
       button.addEventListener('click', () => {
         this.promotionDialog.classList.add('hidden');
         onSelect(type);
@@ -370,14 +386,23 @@ export class UIManager {
     this.gameOverModal.classList.remove('hidden');
     
     const isWinner = engine.winner === this.myColor;
+    const selfMode = gameMode === 'self';
     
     switch (engine.result) {
       case 'checkmate':
-        this.gameOverIcon.textContent = isWinner ? '🏆' : '💀';
-        this.gameOverTitle.textContent = isWinner ? 'Victoire !' : 'Défaite';
-        this.gameOverMessage.textContent = isWinner
-          ? (gameMode === 'ai' ? "Échec et mat contre l'IA !" : 'Échec et mat !')
-          : (gameMode === 'ai' ? "L'IA vous a maté." : 'Vous êtes maté.');
+        if (selfMode) {
+          this.gameOverIcon.textContent = '♛';
+          this.gameOverTitle.textContent = 'Échec et mat';
+          this.gameOverMessage.textContent = engine.winner === 'white'
+            ? 'Victoire des blancs.'
+            : 'Victoire des noirs.';
+        } else {
+          this.gameOverIcon.textContent = isWinner ? '🏆' : '💀';
+          this.gameOverTitle.textContent = isWinner ? 'Victoire !' : 'Défaite';
+          this.gameOverMessage.textContent = isWinner
+            ? (gameMode === 'ai' ? "Échec et mat contre l'IA !" : 'Échec et mat !')
+            : (gameMode === 'ai' ? "L'IA vous a maté." : 'Vous êtes maté.');
+        }
         break;
         
       case 'stalemate':
@@ -405,11 +430,19 @@ export class UIManager {
         break;
         
       case 'timeout':
-        this.gameOverIcon.textContent = isWinner ? '🏆' : '⏱';
-        this.gameOverTitle.textContent = isWinner ? 'Victoire !' : 'Temps écoulé';
-        this.gameOverMessage.textContent = isWinner 
-          ? 'Temps adverse écoulé !' 
-          : 'Votre temps est écoulé.';
+        if (selfMode) {
+          this.gameOverIcon.textContent = '⏱';
+          this.gameOverTitle.textContent = 'Temps écoulé';
+          this.gameOverMessage.textContent = engine.winner === 'white'
+            ? 'Les noirs perdent au temps.'
+            : 'Les blancs perdent au temps.';
+        } else {
+          this.gameOverIcon.textContent = isWinner ? '🏆' : '⏱';
+          this.gameOverTitle.textContent = isWinner ? 'Victoire !' : 'Temps écoulé';
+          this.gameOverMessage.textContent = isWinner
+            ? 'Temps adverse écoulé !'
+            : 'Votre temps est écoulé.';
+        }
         break;
     }
   }
