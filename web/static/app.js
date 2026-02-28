@@ -394,29 +394,9 @@ class ChessApp {
    * Setup all event listeners
    */
   setupEventListeners() {
-    // Mode selection
-    document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
-      btn.addEventListener('click', () => this.selectMode(btn.dataset.mode));
-    });
-    
     // Time control selection
     document.querySelectorAll('.time-btn[data-time]').forEach(btn => {
       btn.addEventListener('click', () => this.selectTime(parseInt(btn.dataset.time)));
-    });
-    
-    // Difficulty selection
-    document.querySelectorAll('.diff-btn.diff').forEach(btn => {
-      btn.addEventListener('click', () => this.selectDifficulty(parseInt(btn.dataset.diff)));
-    });
-    
-    // Color selection
-    document.querySelectorAll('.color-btn.color-pick').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.color-btn.color-pick').forEach(b => 
-          b.classList.remove('active')
-        );
-        btn.classList.add('active');
-      });
     });
     
     // Online actions
@@ -433,10 +413,6 @@ class ChessApp {
     // Waiting room actions
     $('btn-copy-code').addEventListener('click', () => this.copyRoomCode());
     $('btn-cancel').addEventListener('click', () => this.cancelWaiting());
-    
-    // AI actions
-    $('btn-play-ai').addEventListener('click', () => this.startAIGame());
-    $('btn-play-self').addEventListener('click', () => this.startSelfGame());
     
     // Game actions
     $('btn-resign').addEventListener('click', () => this.resign());
@@ -474,29 +450,8 @@ class ChessApp {
    * Keep only multiplayer UI in lobby
    */
   resetLobbyToNormal() {
-    const modeSwitch = document.querySelector('.mode-switch');
-    if (modeSwitch) modeSwitch.classList.add('hidden');
-    
     // Reset to online mode
     this.currentMode = 'online';
-    this.selectMode('online');
-  }
-
-  /**
-   * Select game mode
-   */
-  selectMode(mode) {
-    mode = 'online';
-
-    this.currentMode = mode;
-    
-    document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === mode);
-    });
-    
-    $('online-actions').classList.remove('hidden');
-    $('ai-actions').classList.add('hidden');
-    $('self-actions').classList.add('hidden');
   }
 
   /**
@@ -507,17 +462,6 @@ class ChessApp {
     
     document.querySelectorAll('.time-btn[data-time]').forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.dataset.time) === time);
-    });
-  }
-
-  /**
-   * Select AI difficulty
-   */
-  selectDifficulty(difficulty) {
-    this.offlineGame.aiDifficulty = difficulty;
-    
-    document.querySelectorAll('.diff-btn.diff').forEach(btn => {
-      btn.classList.toggle('active', parseInt(btn.dataset.diff) === difficulty);
     });
   }
 
@@ -611,34 +555,6 @@ class ChessApp {
     hide(this.matchmakingPanel);
     show(this.lobbyContent);
     hide(this.lobbyStatus);
-  }
-
-  /**
-   * Start AI game
-   */
-  startAIGame() {
-    const colorBtn = document.querySelector('.color-btn.color-pick.active');
-    let playerColor = colorBtn?.dataset.color || 'white';
-    
-    if (playerColor === 'random') {
-      playerColor = Math.random() < 0.5 ? 'white' : 'black';
-    }
-    
-    console.log('[App] Starting AI game as', playerColor);
-    
-    this.offlineGame.startGame(
-      playerColor,
-      this.offlineGame.aiDifficulty,
-      this.selectedTime
-    );
-  }
-
-  /**
-   * Start local self-play game
-   */
-  startSelfGame() {
-    console.log('[App] Starting local self-play game');
-    this.offlineGame.startSelfGame(this.selectedTime);
   }
 
   /**

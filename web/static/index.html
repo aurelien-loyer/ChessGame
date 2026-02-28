@@ -137,23 +137,6 @@
             <!-- Card -->
             <div class="lobby-card" id="lobby-content">
 
-                <!-- Mode selector -->
-                <div class="mode-switch hidden">
-                    <button class="mode-btn active" data-mode="online">
-                        <span class="mode-icon">🌐</span>
-                        <span class="mode-text">En ligne</span>
-                    </button>
-                    <button class="mode-btn" data-mode="ai">
-                        <span class="mode-icon">🤖</span>
-                        <span class="mode-text">Contre l'IA</span>
-                    </button>
-                    <button class="mode-btn" data-mode="self">
-                        <span class="mode-icon">♟️</span>
-                        <span class="mode-text">2 joueurs local</span>
-                    </button>
-                    <div class="mode-slider"></div>
-                </div>
-
                 <!-- Time control -->
                 <div class="field">
                     <label class="field-label">⏱ Cadence</label>
@@ -191,49 +174,6 @@
                             <button id="btn-join" class="btn-join-go">Rejoindre</button>
                         </div>
                     </div>
-                </div>
-
-                <!-- AI actions -->
-                <div id="ai-actions" class="actions-panel hidden">
-                    <div class="field">
-                        <label class="field-label">Niveau de l'IA</label>
-                        <div class="segmented-control">
-                            <button class="diff-btn diff" data-diff="1">Novice</button>
-                            <button class="diff-btn diff active" data-diff="2">Inter.</button>
-                            <button class="diff-btn diff" data-diff="3">Expert</button>
-                            <button class="diff-btn diff" data-diff="4">Maître</button>
-                            <button class="diff-btn diff diff-gm" data-diff="5">Grand Maître</button>
-                        </div>
-                    </div>
-
-                    <div class="field">
-                        <label class="field-label">♔ Votre couleur</label>
-                        <div class="color-grid">
-                            <button class="color-btn color-pick active" data-color="white">
-                                <span class="color-preview white"></span>Blancs
-                            </button>
-                            <button class="color-btn color-pick" data-color="black">
-                                <span class="color-preview black"></span>Noirs
-                            </button>
-                            <button class="color-btn color-pick" data-color="random">
-                                🎲 Aléatoire
-                            </button>
-                        </div>
-                    </div>
-
-                    <button id="btn-play-ai" class="btn-play">
-                        <span class="btn-play-icon">♞</span>
-                        Lancer la partie
-                    </button>
-                </div>
-
-                <!-- Local self-play actions -->
-                <div id="self-actions" class="actions-panel hidden">
-                    <p class="field-label">Même appareil, les deux couleurs</p>
-                    <button id="btn-play-self" class="btn-play">
-                        <span class="btn-play-icon">♔♚</span>
-                        Jouer contre soi-même
-                    </button>
                 </div>
 
             </div>
