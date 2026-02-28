@@ -400,32 +400,32 @@ class ChessApp {
     });
     
     // Online actions
-    $('btn-create').addEventListener('click', () => this.createOnlineGame());
-    $('btn-join').addEventListener('click', () => this.joinOnlineGame());
-    $('input-room').addEventListener('keydown', e => {
+    $('btn-create')?.addEventListener('click', () => this.createOnlineGame());
+    $('btn-join')?.addEventListener('click', () => this.joinOnlineGame());
+    $('input-room')?.addEventListener('keydown', e => {
       if (e.key === 'Enter') this.joinOnlineGame();
     });
     
     // Matchmaking
-    $('btn-matchmaking').addEventListener('click', () => this.startMatchmaking());
-    $('btn-cancel-mm').addEventListener('click', () => this.cancelMatchmaking());
+    $('btn-matchmaking')?.addEventListener('click', () => this.startMatchmaking());
+    $('btn-cancel-mm')?.addEventListener('click', () => this.cancelMatchmaking());
     
     // Waiting room actions
-    $('btn-copy-code').addEventListener('click', () => this.copyRoomCode());
-    $('btn-cancel').addEventListener('click', () => this.cancelWaiting());
+    $('btn-copy-code')?.addEventListener('click', () => this.copyRoomCode());
+    $('btn-cancel')?.addEventListener('click', () => this.cancelWaiting());
     
     // Game actions
-    $('btn-resign').addEventListener('click', () => this.resign());
-    $('btn-back-menu').addEventListener('click', () => this.backToLobby());
-    $('btn-new-game').addEventListener('click', () => this.backToLobby());
+    $('btn-resign')?.addEventListener('click', () => this.resign());
+    $('btn-back-menu')?.addEventListener('click', () => this.backToLobby());
+    $('btn-new-game')?.addEventListener('click', () => this.backToLobby());
 
     // Stats bar actions
-    $('btn-ranking').addEventListener('click', () => this.showRanking());
-    $('btn-close-ranking').addEventListener('click', () => $('ranking-overlay').classList.add('hidden'));
-    $('btn-logout').addEventListener('click', () => this.logout());
+    $('btn-ranking')?.addEventListener('click', () => this.showRanking());
+    $('btn-close-ranking')?.addEventListener('click', () => $('ranking-overlay')?.classList.add('hidden'));
+    $('btn-logout')?.addEventListener('click', () => this.logout());
 
     // Navigation
-    $('btn-lobby-back').addEventListener('click', () => this.backToEntryFromLobby());
+    $('btn-lobby-back')?.addEventListener('click', () => this.backToEntryFromLobby());
   }
 
   /**
