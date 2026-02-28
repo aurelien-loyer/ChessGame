@@ -35,7 +35,6 @@ class ChessApp {
     this.username = null;
     this.authToken = localStorage.getItem('chess_token') || null;
     this.userStats = { wins: 0, losses: 0, draws: 0 };
-    this.salonMode = false; // Guest mode (AI/local only)
     
     // DOM References
     this.modeSelectScreen = $('mode-select-screen');
@@ -65,9 +64,10 @@ class ChessApp {
     btnAuth.addEventListener('click', () => this.enterAuthFlow());
 
     btnGuest.addEventListener('click', () => {
-      this.salonMode = true;
+      this.username = null;
       this.onlineGame.username = this.generateGuestName();
-      this.setupSalonLobby();
+      this.resetLobbyToNormal();
+      this.updateStatsBar();
 
       hide(this.modeSelectScreen);
       this.modeSelectScreen.classList.remove('active');
@@ -102,7 +102,6 @@ class ChessApp {
    * Enter authenticated flow
    */
   enterAuthFlow() {
-    this.salonMode = false;
     hide(this.modeSelectScreen);
     this.modeSelectScreen.classList.remove('active');
 
@@ -286,7 +285,7 @@ class ChessApp {
     const bar = $('player-stats-bar');
     if (!bar) return;
 
-    if (this.salonMode || !this.username) {
+    if (!this.username) {
       bar.classList.add('hidden');
       return;
     }
@@ -472,30 +471,11 @@ class ChessApp {
   }
 
   /**
-   * Setup lobby for salon mode — silently force AI only
-   */
-  setupSalonLobby() {
-    // Keep local offline modes available, but hide online entry
-    this.currentMode = 'ai';
-
-    const modeSwitch = document.querySelector('.mode-switch');
-    if (modeSwitch) modeSwitch.classList.remove('hidden');
-
-    const onlineModeBtn = document.querySelector('.mode-btn[data-mode="online"]');
-    if (onlineModeBtn) onlineModeBtn.classList.add('hidden');
-
-    this.selectMode('ai');
-  }
-
-  /**
-   * Reset lobby to normal mode (all options visible)
+   * Keep only multiplayer UI in lobby
    */
   resetLobbyToNormal() {
     const modeSwitch = document.querySelector('.mode-switch');
-    if (modeSwitch) modeSwitch.classList.remove('hidden');
-
-    const onlineModeBtn = document.querySelector('.mode-btn[data-mode="online"]');
-    if (onlineModeBtn) onlineModeBtn.classList.remove('hidden');
+    if (modeSwitch) modeSwitch.classList.add('hidden');
     
     // Reset to online mode
     this.currentMode = 'online';
@@ -506,9 +486,7 @@ class ChessApp {
    * Select game mode
    */
   selectMode(mode) {
-    if (this.salonMode && mode === 'online') {
-      mode = 'ai';
-    }
+    mode = 'online';
 
     this.currentMode = mode;
     
@@ -516,9 +494,9 @@ class ChessApp {
       btn.classList.toggle('active', btn.dataset.mode === mode);
     });
     
-    $('online-actions').classList.toggle('hidden', mode !== 'online');
-    $('ai-actions').classList.toggle('hidden', mode !== 'ai');
-    $('self-actions').classList.toggle('hidden', mode !== 'self');
+    $('online-actions').classList.remove('hidden');
+    $('ai-actions').classList.add('hidden');
+    $('self-actions').classList.add('hidden');
   }
 
   /**
@@ -700,6 +678,7 @@ class ChessApp {
     hide(this.lobbyStatus);
     
     this.inputRoom.value = '';
+    this.resetLobbyToNormal();
 
     // Close ranking overlay if open
     $('ranking-overlay')?.classList.add('hidden');
