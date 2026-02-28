@@ -478,16 +478,16 @@ class ChessApp {
    * Setup lobby for salon mode — silently force AI only
    */
   setupSalonLobby() {
-    // Force AI mode
+    // Keep local offline modes available, but hide online entry
     this.currentMode = 'ai';
-    
-    // Hide mode switch so user can't switch to online
+
     const modeSwitch = document.querySelector('.mode-switch');
-    if (modeSwitch) modeSwitch.classList.add('hidden');
-    
-    // Show AI actions, hide online actions
-    $('online-actions').classList.add('hidden');
-    $('ai-actions').classList.remove('hidden');
+    if (modeSwitch) modeSwitch.classList.remove('hidden');
+
+    const onlineModeBtn = document.querySelector('.mode-btn[data-mode="online"]');
+    if (onlineModeBtn) onlineModeBtn.classList.add('hidden');
+
+    this.selectMode('ai');
   }
 
   /**
@@ -496,6 +496,9 @@ class ChessApp {
   resetLobbyToNormal() {
     const modeSwitch = document.querySelector('.mode-switch');
     if (modeSwitch) modeSwitch.classList.remove('hidden');
+
+    const onlineModeBtn = document.querySelector('.mode-btn[data-mode="online"]');
+    if (onlineModeBtn) onlineModeBtn.classList.remove('hidden');
     
     // Reset to online mode
     this.currentMode = 'online';
@@ -506,6 +509,10 @@ class ChessApp {
    * Select game mode
    */
   selectMode(mode) {
+    if (this.salonMode && mode === 'online') {
+      mode = 'ai';
+    }
+
     this.currentMode = mode;
     
     document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {

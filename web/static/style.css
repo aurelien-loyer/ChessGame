@@ -80,7 +80,8 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -419,10 +420,12 @@ body {
 .lobby-box {
   text-align: center;
   width: 100%;
-  max-width: 480px;
+  max-width: min(520px, 96vw);
   padding: 24px;
   position: relative;
   z-index: 2;
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
 }
 
 /* --- Header Section --- */
@@ -2395,6 +2398,29 @@ body {
 
   .status-row {
     margin-top: 2px;
+  }
+
+  .screen {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .screen.active {
+    align-items: flex-start;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .mode-text {
+    display: none;
+  }
+
+  .mode-btn {
+    justify-content: center;
+    padding-left: 4px;
+    padding-right: 4px;
   }
 }
 
