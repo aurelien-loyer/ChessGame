@@ -14,42 +14,42 @@
     <!-- ===== SHARED 3D BACKGROUND ===== -->
     <canvas id="hero-canvas"></canvas>
 
-    <!-- ===== MODE SELECTION SCREEN ===== -->
+    <!-- ===== ENTRY SCREEN ===== -->
     <div id="mode-select-screen" class="screen active">
         <div class="ms-wrapper">
             <!-- Header -->
             <div class="ms-hero">
                 <div class="ms-hero-icon">♔</div>
-                <h1 class="ms-title">Maître du Jeu</h1>
-                <p class="ms-subtitle">La stratégie pure, redéfinie.</p>
+                <h1 class="ms-title">Chess Arena</h1>
+                <p class="ms-subtitle">Joue maintenant avec ou sans compte.</p>
             </div>
 
             <!-- Cards -->
             <div class="ms-cards">
-                <button id="btn-mode-basic" class="ms-card ms-card-light">
+                <button id="btn-enter-auth" class="ms-card ms-card-light">
                     <div class="ms-card-content">
-                        <span class="ms-card-icon">⚡️</span>
+                        <span class="ms-card-icon">🔐</span>
                         <div class="ms-card-text">
-                            <span class="ms-card-head">Multijoueur</span>
-                            <span class="ms-card-sub">Défiez le monde</span>
+                            <span class="ms-card-head">Connexion / Inscription</span>
+                            <span class="ms-card-sub">Classement et parties en ligne</span>
                         </div>
                     </div>
                     <div class="ms-card-arrow">→</div>
                 </button>
 
-                <button id="btn-mode-salon" class="ms-card ms-card-accent">
+                <button id="btn-enter-guest" class="ms-card ms-card-accent">
                     <div class="ms-card-content">
-                        <span class="ms-card-icon">🧠</span>
+                        <span class="ms-card-icon">👤</span>
                         <div class="ms-card-text">
-                            <span class="ms-card-head">Solo vs IA</span>
-                            <span class="ms-card-sub">Affrontez l'ordinateur</span>
+                            <span class="ms-card-head">Jouer en invité</span>
+                            <span class="ms-card-sub">Partie immédiate sans compte</span>
                         </div>
                     </div>
                     <div class="ms-card-arrow">→</div>
                 </button>
             </div>
 
-            <p class="ms-footer">Classement mondial · Créez votre compte</p>
+            <p class="ms-footer">Tu peux revenir en arrière depuis chaque menu</p>
         </div>
     </div>
 
@@ -100,24 +100,7 @@
                 <button type="submit" class="btn-auth-submit">Créer le compte ✦</button>
             </form>
 
-            <button id="btn-auth-back" class="btn-back-auth">← Retour</button>
-        </div>
-    </div>
-
-    <!-- ===== WELCOME SCREEN ===== -->
-    <div id="welcome-screen" class="screen">
-        <div class="ms-wrapper welcome-wrapper">
-            <div class="ms-hero">
-                <div class="ms-hero-icon welcome-icon-anim">♔</div>
-                <h1 class="ms-title">Prêt à<br><span class="welcome-gradient">jouer ?</span></h1>
-                <p class="ms-subtitle">Entrez dans la légende.</p>
-            </div>
-            <button id="btn-enter" class="btn-play-pulse">
-                <span class="btn-shimmer"></span>
-                JOUER
-            </button>
-            <p class="ms-footer">Aucun compte requis · Jeu immédiat</p>
-            <img src="epitech_logo.png" alt="Epitech" class="epitech-logo" />
+            <button id="btn-auth-back" class="btn-back-auth">← Retour accueil</button>
         </div>
     </div>
 
@@ -127,6 +110,7 @@
 
             <!-- Header -->
             <div class="lobby-header">
+                <button id="btn-lobby-back" class="btn-back-lobby">← Retour</button>
                 <div class="lobby-icon">♔</div>
                 <h1>Chess<span>Arena</span></h1>
                 <p class="tagline" id="welcome-tagline">Prêt à en découdre ?</p>

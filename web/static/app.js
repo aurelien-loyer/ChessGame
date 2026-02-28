@@ -35,11 +35,10 @@ class ChessApp {
     this.username = null;
     this.authToken = localStorage.getItem('chess_token') || null;
     this.userStats = { wins: 0, losses: 0, draws: 0 };
-    this.salonMode = false;
+    this.salonMode = false; // Guest mode (AI/local only)
     
     // DOM References
     this.modeSelectScreen = $('mode-select-screen');
-    this.welcomeScreen = $('welcome-screen');
     this.authScreen = $('auth-screen');
     this.lobbyScreen = $('lobby');
     this.gameScreen = $('game');
@@ -51,27 +50,29 @@ class ChessApp {
     
     // Initialize
     this.setupModeSelectScreen();
-    this.setupWelcomeScreen();
     this.setupAuthScreen();
     this.setupEventListeners();
     this.setupGameCallbacks();
   }
 
   /**
-   * Setup mode selection screen
+   * Setup entry screen
    */
   setupModeSelectScreen() {
-    const btnBasic = $('btn-mode-basic');
-    const btnSalon = $('btn-mode-salon');
+    const btnAuth = $('btn-enter-auth');
+    const btnGuest = $('btn-enter-guest');
 
-    btnBasic.addEventListener('click', () => {
-      this.salonMode = false;
-      this.transitionToWelcome();
-    });
+    btnAuth.addEventListener('click', () => this.enterAuthFlow());
 
-    btnSalon.addEventListener('click', () => {
+    btnGuest.addEventListener('click', () => {
       this.salonMode = true;
-      this.transitionToWelcome();
+      this.onlineGame.username = this.generateGuestName();
+      this.setupSalonLobby();
+
+      hide(this.modeSelectScreen);
+      this.modeSelectScreen.classList.remove('active');
+      show(this.lobbyScreen);
+      this.lobbyScreen.classList.add('active');
     });
 
     // Spawn floating chess piece particles
@@ -98,52 +99,27 @@ class ChessApp {
   }
 
   /**
-   * Transition from mode select
+   * Enter authenticated flow
    */
-  transitionToWelcome() {
+  enterAuthFlow() {
+    this.salonMode = false;
     hide(this.modeSelectScreen);
     this.modeSelectScreen.classList.remove('active');
 
-    if (this.salonMode) {
-      // Solo vs IA — welcome screen with JOUER button
-      show(this.welcomeScreen);
-      this.welcomeScreen.classList.add('active');
-    } else {
-      // Multiplayer — check auth token first
-      if (this.authToken) {
-        this.verifyToken(this.authToken).then(user => {
-          if (user) {
-            this.onAuthSuccess(user.username, this.authToken, user);
-          } else {
-            this.authToken = null;
-            localStorage.removeItem('chess_token');
-            this._showAuthScreen();
-          }
-        });
-      } else {
-        this._showAuthScreen();
-      }
+    if (this.authToken) {
+      this.verifyToken(this.authToken).then(user => {
+        if (user) {
+          this.onAuthSuccess(user.username, this.authToken, user);
+        } else {
+          this.authToken = null;
+          localStorage.removeItem('chess_token');
+          this._showAuthScreen();
+        }
+      });
+      return;
     }
-  }
 
-  /**
-   * Setup welcome screen (Solo vs IA only)
-   */
-  setupWelcomeScreen() {
-    const btnEnter = $('btn-enter');
-    
-    btnEnter.addEventListener('click', () => {
-      // Use logged-in username if available, else generate guest name
-      const name = this.username || this.generateGuestName();
-      this.onlineGame.username = name;
-      
-      this.setupSalonLobby();
-      
-      hide(this.welcomeScreen);
-      this.welcomeScreen.classList.remove('active');
-      show(this.lobbyScreen);
-      this.lobbyScreen.classList.add('active');
-    });
+    this._showAuthScreen();
   }
 
   /**
@@ -398,6 +374,24 @@ class ChessApp {
   }
 
   /**
+   * Return from lobby to entry screen
+   */
+  backToEntryFromLobby() {
+    this.onlineGame.cleanup();
+    hide(this.waitingPanel);
+    hide(this.matchmakingPanel);
+    show(this.lobbyContent);
+    hide(this.lobbyStatus);
+    $('ranking-overlay')?.classList.add('hidden');
+    this.inputRoom.value = '';
+
+    hide(this.lobbyScreen);
+    this.lobbyScreen.classList.remove('active');
+    show(this.modeSelectScreen);
+    this.modeSelectScreen.classList.add('active');
+  }
+
+  /**
    * Setup all event listeners
    */
   setupEventListeners() {
@@ -454,6 +448,9 @@ class ChessApp {
     $('btn-ranking').addEventListener('click', () => this.showRanking());
     $('btn-close-ranking').addEventListener('click', () => $('ranking-overlay').classList.add('hidden'));
     $('btn-logout').addEventListener('click', () => this.logout());
+
+    // Navigation
+    $('btn-lobby-back').addEventListener('click', () => this.backToEntryFromLobby());
   }
 
   /**

@@ -432,6 +432,28 @@ body {
 .lobby-header {
   margin-bottom: 36px;
   animation: fade-in-up 0.8s ease-out;
+  position: relative;
+}
+
+.btn-back-lobby {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--brd);
+  border-radius: 10px;
+  background: var(--bg2);
+  color: var(--t2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.btn-back-lobby:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .lobby-icon {
