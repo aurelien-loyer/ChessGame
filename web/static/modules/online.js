@@ -409,6 +409,25 @@ export class OnlineGame {
         this.isMatchmaking = false;
         this.stopMatchmakingTimer();
         break;
+
+      case 'challenge_sent':
+        console.log('[Online] Challenge sent to', msg.target);
+        if (this.onChallengeSent) this.onChallengeSent(msg.target);
+        break;
+
+      case 'challenge_received':
+        console.log('[Online] Challenge received from', msg.from);
+        if (this.onChallengeReceived) this.onChallengeReceived(msg.from, msg.time);
+        break;
+
+      case 'challenge_declined':
+        console.log('[Online] Challenge declined by', msg.by);
+        if (this.onChallengeDeclined) this.onChallengeDeclined(msg.by);
+        break;
+
+      case 'challenge_error':
+        showToast(this.lobbyStatus, msg.message, 'error');
+        break;
     }
   }
 
@@ -473,6 +492,29 @@ export class OnlineGame {
   // =======================================================================
   // Room & matchmaking actions
   // =======================================================================
+
+  /**
+   * Send a challenge to a specific player
+   */
+  sendChallenge(targetUsername, timeLimit) {
+    this.connect(() => {
+      this.send({ type: 'challenge_invite', target: targetUsername, time: timeLimit });
+    });
+  }
+
+  /**
+   * Accept an incoming challenge
+   */
+  acceptChallenge() {
+    this.send({ type: 'challenge_accept' });
+  }
+
+  /**
+   * Decline an incoming challenge
+   */
+  declineChallenge() {
+    this.send({ type: 'challenge_decline' });
+  }
 
   /**
    * Create a new room

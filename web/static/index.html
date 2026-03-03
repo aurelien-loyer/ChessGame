@@ -236,6 +236,33 @@
             <!-- Status toast -->
             <div id="lobby-status" class="toast hidden"></div>
 
+            <!-- Online Players Panel -->
+            <div id="online-players-panel" class="online-panel hidden">
+                <div class="online-panel-header">
+                    <span class="online-panel-title">🟢 Joueurs en ligne</span>
+                    <span id="online-count" class="online-count">0</span>
+                </div>
+                <div id="online-players-list" class="online-players-list">
+                    <p class="online-empty">Aucun autre joueur en ligne</p>
+                </div>
+            </div>
+
+            <!-- Challenge received notification -->
+            <div id="challenge-toast" class="challenge-toast hidden">
+                <div class="challenge-toast-inner">
+                    <span class="challenge-icon">⚔</span>
+                    <div class="challenge-info">
+                        <strong id="challenge-from-name">Joueur</strong>
+                        <span>vous défie à une partie</span>
+                        <span id="challenge-time-label" class="challenge-time"></span>
+                    </div>
+                    <div class="challenge-actions">
+                        <button id="btn-challenge-accept" class="btn-challenge-accept">✓ Accepter</button>
+                        <button id="btn-challenge-decline" class="btn-challenge-decline">✕</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Waiting overlay (room code) -->
             <div id="waiting-panel" class="hidden">
                 <div class="waiting-card">

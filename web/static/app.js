@@ -37,6 +37,10 @@ class ChessApp {
     this.username = null;
     this.authToken = localStorage.getItem('chess_token') || null;
     this.userStats = { wins: 0, losses: 0, draws: 0 };
+
+    // Online players polling
+    this._playersInterval = null;
+    this._pendingChallengeFrom = null; // username who challenged us
     
     // DOM References
     this.modeSelectScreen = $('mode-select-screen');
@@ -269,6 +273,7 @@ class ChessApp {
       this.updateStatsBar();
       show(this.lobbyScreen);
       this.lobbyScreen.classList.add('active');
+      this.startPlayersPolling();
     }
   }
 
@@ -358,6 +363,7 @@ class ChessApp {
   }
 
   logout() {
+    this.stopPlayersPolling();
     localStorage.removeItem('chess_token');
     localStorage.removeItem('chess_username');
     this.authToken = null;
@@ -378,6 +384,7 @@ class ChessApp {
    * Return from lobby to entry screen
    */
   backToEntryFromLobby() {
+    this.stopPlayersPolling();
     this.onlineGame.cleanup();
     hide(this.waitingPanel);
     hide(this.matchmakingPanel);
@@ -455,6 +462,10 @@ class ChessApp {
 
     // Navigation
     $('btn-lobby-back')?.addEventListener('click', () => this.backToEntryFromLobby());
+
+    // Challenge toast actions
+    $('btn-challenge-accept')?.addEventListener('click', () => this.acceptChallenge());
+    $('btn-challenge-decline')?.addEventListener('click', () => this.declineChallenge());
   }
 
   /**
@@ -463,15 +474,36 @@ class ChessApp {
   setupGameCallbacks() {
     this.onlineGame.onGameEnd = (result) => {
       console.log('[App] Online game ended:', result);
-      // Stats are recorded server-side — just refresh our local display
       if (this.authToken) {
-        // Small delay to let the server process the game_end message
         setTimeout(() => this.refreshStats(), 500);
       }
     };
     
     this.offlineGame.onGameEnd = () => {
       console.log('[App] Offline game ended');
+    };
+
+    // Challenge callbacks
+    this.onlineGame.onChallengeSent = (target) => {
+      showToast(this.lobbyStatus, `Défi envoyé à ${target} — en attente…`, 'info');
+    };
+
+    this.onlineGame.onChallengeReceived = (from, time) => {
+      this._pendingChallengeFrom = from;
+      const timeLabel = time === 0 ? '∞' : (Math.floor(time / 60) + ' min');
+      $('challenge-from-name').textContent = from;
+      $('challenge-time-label').textContent = timeLabel;
+      $('challenge-toast').classList.remove('hidden');
+    };
+
+    this.onlineGame.onChallengeDeclined = (by) => {
+      showToast(this.lobbyStatus, `${by} a refusé le défi.`, 'error');
+      // Reset lobby if we were waiting
+      this.onlineGame.cleanup();
+      hide(this.waitingPanel);
+      show(this.lobbyContent);
+      hide(this.lobbyStatus);
+      setTimeout(() => show(this.lobbyStatus), 0);
     };
   }
 
@@ -546,6 +578,102 @@ class ChessApp {
     this.lobbyScreen.classList.remove('active');
     show(this.gameScreen);
     this.gameScreen.classList.add('active');
+  }
+
+  // =========================================================================
+  // Online players panel
+  // =========================================================================
+
+  /**
+   * Start polling for online players (when lobby is shown)
+   */
+  startPlayersPolling() {
+    this.stopPlayersPolling();
+    this.fetchOnlinePlayers();
+    this._playersInterval = setInterval(() => this.fetchOnlinePlayers(), 5000);
+  }
+
+  stopPlayersPolling() {
+    if (this._playersInterval) {
+      clearInterval(this._playersInterval);
+      this._playersInterval = null;
+    }
+  }
+
+  async fetchOnlinePlayers() {
+    // Only show online players panel for authenticated users
+    const panel = $('online-players-panel');
+    if (!panel) return;
+    if (!this.username) {
+      panel.classList.add('hidden');
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api/online-players', {
+        headers: this.authToken ? { 'Authorization': 'Bearer ' + this.authToken } : {}
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      this.renderOnlinePlayers(data.players || []);
+    } catch (e) {
+      // silently ignore network errors
+    }
+  }
+
+  renderOnlinePlayers(players) {
+    const panel = $('online-players-panel');
+    const list  = $('online-players-list');
+    const count = $('online-count');
+    if (!panel || !list) return;
+
+    count.textContent = players.length;
+
+    if (players.length === 0) {
+      list.innerHTML = '<p class="online-empty">Aucun autre joueur en ligne</p>';
+      panel.classList.remove('hidden');
+      return;
+    }
+
+    list.innerHTML = players.map(p => {
+      const isAvailable = p.status === 'available';
+      return `
+        <div class="online-player-row">
+          <span class="online-dot ${isAvailable ? 'available' : 'in-game'}"></span>
+          <span class="online-name">${p.username}</span>
+          <span class="online-status-label">${isAvailable ? 'disponible' : 'en partie'}</span>
+          ${isAvailable
+            ? `<button class="btn-invite" data-target="${p.username}" title="Inviter à jouer">⚔ Défier</button>`
+            : '<span class="btn-invite-disabled">En partie</span>'}
+        </div>`;
+    }).join('');
+
+    // Wire invite buttons
+    list.querySelectorAll('.btn-invite[data-target]').forEach(btn => {
+      btn.addEventListener('click', () => this.sendChallenge(btn.dataset.target));
+    });
+
+    panel.classList.remove('hidden');
+  }
+
+  sendChallenge(targetUsername) {
+    if (!this.username) {
+      showToast(this.lobbyStatus, 'Connectez-vous pour inviter un joueur.', 'error');
+      return;
+    }
+    this.onlineGame.username = this.username;
+    this.onlineGame.sendChallenge(targetUsername, this.selectedTime);
+  }
+
+  acceptChallenge() {
+    $('challenge-toast').classList.add('hidden');
+    this.onlineGame.acceptChallenge();
+  }
+
+  declineChallenge() {
+    $('challenge-toast').classList.add('hidden');
+    this._pendingChallengeFrom = null;
+    this.onlineGame.declineChallenge();
   }
 
   /**
@@ -684,6 +812,9 @@ class ChessApp {
 
     // Refresh stats bar for multiplayer
     this.updateStatsBar();
+
+    // Resume polling for online players
+    this.startPlayersPolling();
   }
 }
 

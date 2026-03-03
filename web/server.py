@@ -494,6 +494,40 @@ async def game_result_handler(request):
     return web.json_response({'wins': row[0], 'losses': row[1], 'draws': row[2]})
 
 
+# --- Online players API ---
+async def online_players_handler(request):
+    """
+    GET /api/online-players
+    Returns a list of connected authenticated players with their status.
+    """
+    # Get the requesting user from auth header (optional)
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.replace('Bearer ', '').strip()
+    requester = lookup_token(token) if token else None
+
+    players_list = []
+    for ws, username in player_names.items():
+        if ws.closed:
+            continue
+        if not username:
+            continue
+        in_game = username in player_rooms
+        players_list.append({
+            'username': username,
+            'status': 'in_game' if in_game else 'available'
+        })
+
+    # Remove the requester from their own list
+    if requester:
+        players_list = [p for p in players_list if p['username'].lower() != requester.lower()]
+
+    return web.json_response({'players': players_list})
+
+
+# --- Pending challenges: challenger_username -> { target_username, room_id, ws } ---
+pending_challenges = {}  # target_username -> { challenger_username, room_id, ws }
+
+
 # --- WebSocket handler ---
 async def websocket_handler(request):
     """Gère la connexion WebSocket d'un joueur."""
@@ -904,8 +938,147 @@ async def websocket_handler(request):
                             except Exception:
                                 pass
 
+                # ============================================================
+                # CHALLENGE — invite a specific online player
+                # ============================================================
+                elif msg_type == "challenge_invite":
+                    my_name = get_username_for_ws(ws)
+                    if not my_name:
+                        await ws.send_json({"type": "error", "message": "Connectez-vous pour inviter."})
+                        continue
+
+                    target = msg.get("target", "").strip()
+                    if not target or target.lower() == my_name.lower():
+                        continue
+
+                    # Find target ws
+                    target_ws = None
+                    for p_ws, p_name in player_names.items():
+                        if p_name and p_name.lower() == target.lower() and not p_ws.closed:
+                            target_ws = p_ws
+                            break
+
+                    if not target_ws:
+                        await ws.send_json({"type": "challenge_error", "message": f"{target} n'est plus disponible."})
+                        continue
+
+                    if target in player_rooms:
+                        await ws.send_json({"type": "challenge_error", "message": f"{target} est déjà en partie."})
+                        continue
+
+                    if my_name and my_name in player_rooms:
+                        await ws.send_json({"type": "error", "message": "Vous êtes déjà dans une partie."})
+                        continue
+
+                    time_limit = msg.get("time", 300)
+                    if time_limit not in (0, 60, 180, 300, 600, 900, 1800):
+                        time_limit = 300
+
+                    room_id = generate_room_id()
+                    while room_id in rooms:
+                        room_id = generate_room_id()
+
+                    room = Room(room_id, ws, time_limit)
+                    rooms[room_id] = room
+                    current_room = room
+                    if my_name:
+                        player_rooms[my_name] = room_id
+
+                    # Store pending challenge
+                    pending_challenges[target.lower()] = {
+                        "challenger": my_name,
+                        "room_id": room_id,
+                        "ws": ws,
+                        "time": time_limit
+                    }
+
+                    # Notify target
+                    try:
+                        await target_ws.send_json({
+                            "type": "challenge_received",
+                            "from": my_name,
+                            "room_id": room_id,
+                            "time": time_limit
+                        })
+                    except Exception:
+                        pass
+
+                    # Notify challenger that invite was sent
+                    await ws.send_json({"type": "challenge_sent", "target": target})
+
+                # ============================================================
+                # CHALLENGE ACCEPT
+                # ============================================================
+                elif msg_type == "challenge_accept":
+                    my_name = get_username_for_ws(ws)
+                    if not my_name:
+                        continue
+
+                    challenge = pending_challenges.pop(my_name.lower(), None)
+                    if not challenge:
+                        await ws.send_json({"type": "error", "message": "Le défi a expiré ou a été annulé."})
+                        continue
+
+                    room_id = challenge["room_id"]
+                    room = rooms.get(room_id)
+                    challenger_ws = challenge["ws"]
+
+                    if not room or room.is_full() or (challenger_ws and challenger_ws.closed):
+                        await ws.send_json({"type": "error", "message": "Le défi n'est plus disponible."})
+                        rooms.pop(room_id, None)
+                        player_rooms.pop(challenge["challenger"], None)
+                        continue
+
+                    if my_name and my_name in player_rooms:
+                        await ws.send_json({"type": "error", "message": "Vous êtes déjà dans une partie."})
+                        continue
+
+                    room.add_guest(ws)
+                    current_room = room
+                    room.assign_colors()
+                    if my_name:
+                        player_rooms[my_name] = room_id
+
+                    for player_ws, color in room.players.items():
+                        try:
+                            await player_ws.send_json({
+                                "type": "game_start",
+                                "color": color,
+                                "room_id": room_id,
+                                "time": room.time_limit,
+                                "opponent_name": room.get_opponent_name(player_ws)
+                            })
+                        except Exception:
+                            pass
+
+                # ============================================================
+                # CHALLENGE DECLINE
+                # ============================================================
+                elif msg_type == "challenge_decline":
+                    my_name = get_username_for_ws(ws)
+                    if not my_name:
+                        continue
+
+                    challenge = pending_challenges.pop(my_name.lower(), None)
+                    if not challenge:
+                        continue
+
+                    room_id = challenge["room_id"]
+                    rooms.pop(room_id, None)
+                    challenger_name = challenge["challenger"]
+                    player_rooms.pop(challenger_name, None)
+
+                    challenger_ws = challenge["ws"]
+                    if challenger_ws and not challenger_ws.closed:
+                        try:
+                            await challenger_ws.send_json({
+                                "type": "challenge_declined",
+                                "by": my_name
+                            })
+                        except Exception:
+                            pass
+
                 elif msg_type == "reconnect":
-                    # Client tries to rejoin a room after connection drop
                     room_id = msg.get("room_id", "").upper().strip()
                     color = msg.get("color")
                     if room_id in rooms:
@@ -998,6 +1171,16 @@ async def websocket_handler(request):
 
         # Save username before cleanup (we need it for player_rooms)
         disconnecting_username = get_username_for_ws(ws)
+
+        # Clean up any pending challenge sent by or targeting this player
+        if disconnecting_username:
+            # Remove challenges where this player is the target
+            pending_challenges.pop(disconnecting_username.lower(), None)
+            # Remove challenges where this player is the challenger
+            to_remove = [k for k, v in pending_challenges.items() if v.get("challenger", "").lower() == disconnecting_username.lower()]
+            for k in to_remove:
+                challenge = pending_challenges.pop(k)
+                rooms.pop(challenge.get("room_id"), None)
 
         # Clean up username
         player_names.pop(ws, None)
@@ -1252,6 +1435,7 @@ def create_app():
     app.router.add_post("/api/verify-token", verify_token_handler)
     app.router.add_get("/api/ranking", ranking_handler)
     app.router.add_post("/api/game-result", game_result_handler)
+    app.router.add_get("/api/online-players", online_players_handler)
     # WebSocket & static
     app.router.add_get("/ws", websocket_handler)
     app.router.add_get("/", index_handler)

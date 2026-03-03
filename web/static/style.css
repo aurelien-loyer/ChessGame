@@ -1194,7 +1194,246 @@ body {
   text-align: center;
 }
 
-.mm-info {
+/* =========================================================================
+   ONLINE PLAYERS PANEL
+   ========================================================================= */
+
+.online-panel {
+  background: var(--bg2);
+  border: 1px solid var(--brd);
+  border-radius: var(--r-lg);
+  padding: 20px 24px;
+  width: 100%;
+  animation: lobby-card-appear 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  box-shadow: var(--shadow-sm);
+}
+
+.online-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.online-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.online-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.online-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.online-empty {
+  font-size: 13px;
+  color: var(--t3);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.online-player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+
+.online-player-row:hover {
+  background: var(--bg4);
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.online-dot.available {
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.online-dot.in-game {
+  background: var(--yellow);
+}
+
+.online-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t1);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-status-label {
+  font-size: 11px;
+  color: var(--t3);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.btn-invite {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-invite:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.btn-invite-disabled {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--t3);
+  font-weight: 500;
+}
+
+/* =========================================================================
+   CHALLENGE TOAST (incoming challenge notification)
+   ========================================================================= */
+
+.challenge-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: min(480px, calc(100vw - 32px));
+  animation: slide-up-toast 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes slide-up-toast {
+  from { opacity: 0; transform: translateX(-50%) translateY(24px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.challenge-toast-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-lg);
+  padding: 16px 20px;
+  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.25), var(--shadow-lg);
+}
+
+.challenge-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.challenge-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.challenge-info strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--t1);
+}
+
+.challenge-info span {
+  font-size: 13px;
+  color: var(--t2);
+}
+
+.challenge-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px !important;
+  color: var(--accent) !important;
+  font-weight: 700;
+}
+
+.challenge-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-challenge-accept {
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--green);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.btn-challenge-accept:hover {
+  filter: brightness(1.1);
+  transform: scale(1.03);
+}
+
+.btn-challenge-decline {
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t2);
+  background: var(--bg3);
+  border: 1px solid var(--brd);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.btn-challenge-decline:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+
   margin-bottom: 32px;
   animation: fade-in-up 0.8s 0.2s forwards;
   opacity: 0;
