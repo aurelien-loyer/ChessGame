@@ -135,6 +135,22 @@
             <!-- Card -->
             <div class="lobby-card" id="lobby-content">
 
+                <!-- Mode switch -->
+                <div class="mode-switch">
+                    <button class="mode-btn active" data-mode="online">
+                        <span class="mode-icon">⚔</span>
+                        <span class="mode-text">En ligne</span>
+                    </button>
+                    <button class="mode-btn" data-mode="ai">
+                        <span class="mode-icon">🤖</span>
+                        <span class="mode-text">Contre l'IA</span>
+                    </button>
+                    <button class="mode-btn" data-mode="self">
+                        <span class="mode-icon">👥</span>
+                        <span class="mode-text">Local</span>
+                    </button>
+                </div>
+
                 <!-- Time control -->
                 <div class="field">
                     <label class="field-label">⏱ Cadence</label>
@@ -172,6 +188,47 @@
                             <button id="btn-join" class="btn-join-go">Rejoindre</button>
                         </div>
                     </div>
+                </div>
+
+                <!-- AI actions -->
+                <div id="ai-actions" class="actions-panel hidden">
+                    <div class="field">
+                        <label class="field-label">🧠 Niveau de l'IA</label>
+                        <div class="segmented-control">
+                            <button class="diff-btn diff" data-diff="1">Facile</button>
+                            <button class="diff-btn diff active" data-diff="2">Moyen</button>
+                            <button class="diff-btn diff" data-diff="3">Difficile</button>
+                            <button class="diff-btn diff diff-gm" data-diff="4">Expert</button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="field-label">♟ Votre couleur</label>
+                        <div class="color-grid">
+                            <button class="color-btn color-pick active" data-color="white">
+                                <div class="color-preview white"></div>
+                                Blancs
+                            </button>
+                            <button class="color-btn color-pick" data-color="random">
+                                🎲 Aléatoire
+                            </button>
+                            <button class="color-btn color-pick" data-color="black">
+                                <div class="color-preview black"></div>
+                                Noirs
+                            </button>
+                        </div>
+                    </div>
+                    <button id="btn-play-ai" class="btn-play">
+                        <span class="btn-play-icon">🤖</span>
+                        Jouer contre l'IA
+                    </button>
+                </div>
+
+                <!-- Self (local 2-player) actions -->
+                <div id="self-actions" class="actions-panel hidden">
+                    <button id="btn-play-self" class="btn-play">
+                        <span class="btn-play-icon">👥</span>
+                        Jouer en local (2 joueurs)
+                    </button>
                 </div>
 
             </div>

@@ -32,6 +32,8 @@ class ChessApp {
     // State
     this.currentMode = 'online';
     this.selectedTime = 300;
+    this.selectedDifficulty = 2;
+    this.selectedColor = 'white';
     this.username = null;
     this.authToken = localStorage.getItem('chess_token') || null;
     this.userStats = { wins: 0, losses: 0, draws: 0 };
@@ -399,6 +401,33 @@ class ChessApp {
       btn.addEventListener('click', () => this.selectTime(parseInt(btn.dataset.time)));
     });
     
+    // Mode switch
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => this.switchMode(btn.dataset.mode));
+    });
+
+    // Difficulty chips
+    document.querySelectorAll('.diff-btn.diff').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.diff-btn.diff').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.selectedDifficulty = parseInt(btn.dataset.diff);
+      });
+    });
+
+    // Color chips
+    document.querySelectorAll('.color-btn.color-pick').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-btn.color-pick').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.selectedColor = btn.dataset.color;
+      });
+    });
+
+    // AI & self-play
+    $('btn-play-ai')?.addEventListener('click', () => this.startAIGame());
+    $('btn-play-self')?.addEventListener('click', () => this.startSelfGame());
+
     // Online actions
     $('btn-create')?.addEventListener('click', () => this.createOnlineGame());
     $('btn-join')?.addEventListener('click', () => this.joinOnlineGame());
@@ -450,8 +479,7 @@ class ChessApp {
    * Keep only multiplayer UI in lobby
    */
   resetLobbyToNormal() {
-    // Reset to online mode
-    this.currentMode = 'online';
+    this.switchMode('online');
   }
 
   /**
@@ -463,6 +491,61 @@ class ChessApp {
     document.querySelectorAll('.time-btn[data-time]').forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.dataset.time) === time);
     });
+  }
+
+  /**
+   * Switch lobby mode (online / ai / self)
+   */
+  switchMode(mode) {
+    this.currentMode = mode;
+
+    // Update mode buttons
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+
+    // Show/hide panels
+    const onlinePanel = $('online-actions');
+    const aiPanel     = $('ai-actions');
+    const selfPanel   = $('self-actions');
+
+    hide(onlinePanel);
+    hide(aiPanel);
+    hide(selfPanel);
+
+    if (mode === 'online')  show(onlinePanel);
+    else if (mode === 'ai') show(aiPanel);
+    else if (mode === 'self') show(selfPanel);
+  }
+
+  /**
+   * Start a game against the AI
+   */
+  startAIGame() {
+    let color = this.selectedColor;
+    if (color === 'random') {
+      color = Math.random() < 0.5 ? 'white' : 'black';
+    }
+    this.currentMode = 'offline';
+    this.offlineGame.startGame(color, this.selectedDifficulty, this.selectedTime);
+
+    hide(this.lobbyScreen);
+    this.lobbyScreen.classList.remove('active');
+    show(this.gameScreen);
+    this.gameScreen.classList.add('active');
+  }
+
+  /**
+   * Start a local 2-player game
+   */
+  startSelfGame() {
+    this.currentMode = 'offline';
+    this.offlineGame.startSelfGame(this.selectedTime);
+
+    hide(this.lobbyScreen);
+    this.lobbyScreen.classList.remove('active');
+    show(this.gameScreen);
+    this.gameScreen.classList.add('active');
   }
 
   /**
